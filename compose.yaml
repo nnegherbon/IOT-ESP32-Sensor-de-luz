@@ -1,0 +1,62 @@
+services:
+  mosquitto:
+    image: eclipse-mosquitto:2
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+    volumes:
+      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - mosquitto_data:/mosquitto/data
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-iot}
+      POSTGRES_USER: ${POSTGRES_USER:-iot}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-iot_aula}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-iot} -d ${POSTGRES_DB:-iot}"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  backend:
+    build: ./backend
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-iot}:${POSTGRES_PASSWORD:-iot_aula}@postgres:5432/${POSTGRES_DB:-iot}
+      MQTT_HOST: ${MQTT_HOST:-mosquitto}
+      MQTT_PORT: ${MQTT_PORT:-1883}
+      MQTT_BASE_TOPIC: ${MQTT_BASE_TOPIC:-iot/luzambiente}
+      AUTOMATION_LUZ_LIMIAR: ${AUTOMATION_LUZ_LIMIAR:-40}
+      AUTOMATION_LUZ_HISTERESE: ${AUTOMATION_LUZ_HISTERESE:-8}
+      SOM_HABILITADO: ${SOM_HABILITADO:-false}
+      SOM_VALOR_PADRAO: ${SOM_VALOR_PADRAO:-0}
+      AUTOMATION_SOM_MEDIO: ${AUTOMATION_SOM_MEDIO:-25}
+      AUTOMATION_SOM_ALTO: ${AUTOMATION_SOM_ALTO:-55}
+      AUTOMATION_SOM_HISTERESE: ${AUTOMATION_SOM_HISTERESE:-6}
+      OCUPACAO_HABILITADA: ${OCUPACAO_HABILITADA:-false}
+      AUTOMATION_BRILHO_MAX: ${AUTOMATION_BRILHO_MAX:-120}
+      AUTOMATION_CARENCIA_S: ${AUTOMATION_CARENCIA_S:-120}
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mosquitto:
+        condition: service_started
+
+  simulator:
+    profiles: ["tools"]
+    build: ./simulator
+    environment:
+      MQTT_HOST: mosquitto
+      MQTT_PORT: 1883
+      MQTT_BASE_TOPIC: ${MQTT_BASE_TOPIC:-iot/luzambiente}
+    depends_on:
+      - mosquitto
+
+volumes:
+  mosquitto_data:
+  postgres_data:
