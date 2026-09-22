@@ -1,4 +1,4 @@
-/* NÓ ATUADOR — 4 Níveis de Luz */
+/* NÓ ATUADOR — 4 Níveis de Luz (Com Confirmação de Estado para N1) */
 #include <Arduino.h>
 #include <ArduinoJson.h>
 #include <PubSubClient.h>
@@ -9,7 +9,7 @@
 #define MQTT_HOST "broker.hivemq.com"
 #define MQTT_PORT 1883
 
-// Definição dos pinos saudáveis (Evitando o D13 avariado)
+// Definição dos pinos saudáveis
 constexpr uint8_t PIN_LED_AMBIENTE = 27; // LED 1
 constexpr uint8_t PIN_LED_ESCURO   = 26; // LED 2
 constexpr uint8_t PIN_LED_ALTA     = 25; // LED 3
@@ -17,7 +17,10 @@ constexpr uint8_t PIN_LED_EXTREMA  = 33; // LED 4
 
 #define BASE "iot/luzambiente"
 constexpr char TOPICO_COMANDO[] = BASE "/atuador/luz/comando";
+constexpr char TOPICO_STATUS[] = BASE "/atuador/status"; // Novo tópico de confirmação
 constexpr char DEVICE_ID[] = "atuador01";
+
+char cenaAtual[16] = "apagada"; // Guarda o estado atual
 
 WiFiClient wifiClient;
 PubSubClient mqtt(wifiClient);
@@ -29,6 +32,14 @@ void desligarTodos() {
   digitalWrite(PIN_LED_EXTREMA, LOW);
 }
 
+// EXIGÊNCIA DA N1: Função que fecha o ciclo comunicando a execução de volta
+void publicarStatus() {
+  char payload[128];
+  snprintf(payload, sizeof(payload), "{\"device\":\"%s\",\"estado\":\"%s_executada\"}", DEVICE_ID, cenaAtual);
+  mqtt.publish(TOPICO_STATUS, payload, true);
+  Serial.printf("Status publicado: %s\n", payload);
+}
+
 void onMessage(char* topic, byte* bytes, unsigned int length) {
   JsonDocument doc;
   if (deserializeJson(doc, bytes, length)) {
@@ -36,27 +47,31 @@ void onMessage(char* topic, byte* bytes, unsigned int length) {
     return;
   }
 
-  const char* cena = doc["cena"] | "apagada";
-  Serial.printf("Cena recebida: %s\n", cena);
+  const char* novaCena = doc["cena"] | "apagada";
+  strlcpy(cenaAtual, novaCena, sizeof(cenaAtual));
+  Serial.printf("Cena recebida: %s\n", cenaAtual);
 
   desligarTodos(); // Limpa o estado anterior
 
   // Lógica de ativação baseada na cena
-  if (strcmp(cena, "escuro") == 0) {
+  if (strcmp(cenaAtual, "escuro") == 0) {
     digitalWrite(PIN_LED_ESCURO, HIGH);
   } 
-  else if (strcmp(cena, "ambiente") == 0) {
+  else if (strcmp(cenaAtual, "ambiente") == 0) {
     digitalWrite(PIN_LED_AMBIENTE, HIGH);
   } 
-  else if (strcmp(cena, "alta") == 0) {
+  else if (strcmp(cenaAtual, "alta") == 0) {
     digitalWrite(PIN_LED_ALTA, HIGH);
   } 
-  else if (strcmp(cena, "extrema") == 0) {
+  else if (strcmp(cenaAtual, "extrema") == 0) {
     digitalWrite(PIN_LED_AMBIENTE, HIGH);
     digitalWrite(PIN_LED_ESCURO, HIGH);
     digitalWrite(PIN_LED_ALTA, HIGH);
     digitalWrite(PIN_LED_EXTREMA, HIGH);
   }
+  
+  // Publica a confirmação de que os LEDs mudaram fisicamente
+  publicarStatus();
 }
 
 void conectar() {
