@@ -14,6 +14,7 @@ const char TOPICO_COMANDO[] = "iot/luzambiente/atuador/luz/comando";
 WiFiClient wifiClient;
 PubSubClient mqtt(wifiClient);
 
+
 String cenaAtual = "";
 
 void conectar() {
