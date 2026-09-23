@@ -1,31 +1,42 @@
-# 💡 IOT-ESP32-Sala-Inteligente — Níveis de Luz
+# 💡 IOT-ESP32-Luminosidade-Plantas
 
-Repositório referente ao projeto de **Internet das Coisas (IoT)** desenvolvido com **ESP32**, utilizando um **sensor de luz LDR** para identificar variações de luminosidade no ambiente e acionar um **painel composto por 4 LEDs** como resposta.
+Repositório referente ao projeto de **Internet das Coisas (IoT)** desenvolvido com **ESP32**, focado em solucionar o problema de exposição solar inadequada no cultivo de plantas.
 
-O projeto utiliza comunicação **Wi-Fi + MQTT**, com o **HiveMQ** atuando como broker, mantendo o módulo responsável pela leitura do sensor fisicamente separado do módulo responsável pelo acionamento dos LEDs.
+O sistema utiliza um **sensor de luz LDR** para medir a intensidade luminosa do ambiente e, atualmente, aciona um **painel de 4 LEDs indicadores** como alerta. Como evolução do projeto, está planejada a implementação de uma **sombra motorizada utilizando um servomotor**, capaz de atuar fisicamente no ambiente quando forem identificados níveis extremos de luminosidade.
+
+O projeto utiliza comunicação **Wi-Fi + MQTT**, com o **HiveMQ** atuando como broker, mantendo o módulo responsável pela leitura do sensor fisicamente separado do módulo responsável pelo acionamento.
 
 ---
 
-## 📋 Sobre o projeto
+## 📋 Sobre o projeto e problema solucionado
 
-O objetivo é desenvolver um sistema IoT desacoplado, no qual a informação capturada fisicamente pelo sensor percorre uma comunicação em rede antes de gerar uma ação física.
+O objetivo é desenvolver um sistema IoT desacoplado para auxiliar na proteção de plantas sensíveis, que podem sofrer danos, queimaduras nas folhas e desidratação quando expostas a níveis excessivos de luz e calor provenientes da exposição solar direta.
 
-O funcionamento ocorre da seguinte maneira:
+O sistema foi desenvolvido considerando dois estágios principais:
 
-1. O **ESP32 Sensor** realiza a leitura da luminosidade através de um sensor **LDR**;
-2. A leitura é processada e classificada em uma das **4 cenas de iluminação**;
-3. O ESP32 conecta-se à rede Wi-Fi e publica a informação no **broker MQTT HiveMQ**;
-4. O **ESP32 Atuador** recebe a mensagem através do MQTT;
-5. O Atuador identifica a cena recebida e aciona o nível correspondente no **painel de 4 LEDs**;
-6. Após executar o comando, o Atuador publica uma **mensagem de confirmação de status**, fechando o ciclo de comunicação.
+### 🌱 Estágio atual — Monitoramento e alerta
 
-### 🔄 Fluxo do sistema
+O sistema monitora continuamente a intensidade luminosa do ambiente.
+
+O **ESP32 Sensor** realiza a leitura do LDR, processa o valor obtido, classifica a luminosidade em uma das **4 cenas de luz** e publica essa informação no broker MQTT.
+
+O **ESP32 Atuador** recebe a cena correspondente e aciona o LED relacionado ao nível de luminosidade detectado, permitindo uma identificação visual do estado atual do ambiente.
+
+### ☀️ Ação física — Em desenvolvimento
+
+Como próxima evolução do projeto, será implementado um **servomotor no Nó Atuador**.
+
+Quando a cena correspondente à **luminosidade extrema** for detectada, o servomotor deverá movimentar uma cobertura física, criando uma área de sombra sobre a planta e reduzindo sua exposição direta à luz solar.
+
+---
+
+## 🔄 Fluxo do sistema — Atual e futuro
 
 ```text
 ┌─────────────────┐
 │   Sensor LDR    │
 │                 │
-│   ESP32 Sensor  │
+│  ESP32 Sensor   │
 └────────┬────────┘
          │
          │ Wi-Fi / MQTT
@@ -39,92 +50,97 @@ O funcionamento ocorre da seguinte maneira:
          ▼
 ┌─────────────────┐
 │  ESP32 Atuador  │
-│                 │
-│  Controle LEDs  │
 └────────┬────────┘
          │
-         ▼
-┌─────────────────┐
-│  Painel 4 LEDs  │
-│                 │
-│ Nível 1 → LED 1 │
-│ Nível 2 → LED 2 │
-│ Nível 3 → LED 3 │
-│ Nível 4 → LED 4 │
-└─────────────────┘
+         ├──► Painel 4 LEDs
+         │    Monitoramento visual
+         │    ✅ Implementado
+         │
+         └──► Servomotor
+              Sombra física
+              🚧 Em desenvolvimento
 ```
 
 ---
 
 ## 🏗️ Arquitetura do sistema
 
-Para garantir que o projeto não seja apenas uma automação local, o sistema possui dois módulos ESP32 fisicamente separados.
+Para garantir que o projeto cumpra a premissa de uma aplicação IoT distribuída, e não apenas uma automação local, o sistema possui dois módulos ESP32 fisicamente separados, interligados através da comunicação Wi-Fi e do protocolo MQTT.
 
-### 📡 Módulo Sensor
+### 📡 Módulo Sensor — ESP32 1
 
 Responsável por:
 
 * Realizar a leitura do sensor LDR;
 * Processar os valores de luminosidade;
-* Classificar a luminosidade em diferentes níveis;
-* Estabelecer conexão com a rede Wi-Fi;
-* Publicar os dados através do protocolo MQTT;
-* Enviar as informações utilizando **JSON**.
+* Classificar a luminosidade nas 4 cenas definidas pelo projeto;
+* Conectar-se à rede Wi-Fi;
+* Publicar os dados no broker MQTT;
+* Estruturar as informações utilizando **JSON**.
 
-### 💡 Módulo Atuador
+### 💡 Módulo Atuador — ESP32 2
 
 Responsável por:
 
 * Conectar-se ao broker MQTT;
 * Escutar os tópicos de comando;
 * Interpretar as mensagens recebidas;
-* Desligar o nível de LED anteriormente acionado;
-* Acionar o LED correspondente à cena recebida;
-* Publicar uma confirmação do estado executado.
+* Desligar o LED correspondente à cena anterior;
+* Acionar o LED da nova cena recebida;
+* Publicar uma confirmação do estado executado no broker MQTT;
+* **Futuramente**, controlar o servomotor responsável pela movimentação da sombra.
 
 ### 🔗 Comunicação
 
-A comunicação entre os módulos ocorre exclusivamente através de:
+A comunicação entre os módulos ocorre através do seguinte fluxo:
 
 **ESP32 Sensor → Wi-Fi → MQTT HiveMQ → Wi-Fi → ESP32 Atuador**
 
-As mensagens são estruturadas utilizando **JSON**, permitindo uma comunicação organizada e facilmente expansível.
+As mensagens são estruturadas utilizando **JSON**, permitindo uma comunicação organizada e facilitando futuras expansões do sistema.
 
 ---
 
+## ⚠️ Precauções de hardware e instalação
 
-## ⚠️ Precauções de hardware
+### 🔌 Sensibilidade do ESP32
 
-O **ESP32 trabalha com lógica de 3,3 V** e possui maior sensibilidade elétrica quando comparado a placas como o Arduino Uno.
+O **ESP32 trabalha com lógica de 3,3 V** e possui limitações elétricas que devem ser respeitadas durante a montagem do circuito.
 
-Por isso, alguns cuidados são fundamentais durante a montagem:
+Por isso, é necessário ter atenção especial à alimentação, corrente e tensão aplicadas aos seus GPIOs.
 
-* Utilize **um resistor individual para cada LED**;
-* Nunca conecte um LED diretamente a um GPIO sem resistor;
-* Evite aplicar tensões superiores às especificações dos GPIOs;
-* Confira a polaridade dos LEDs antes de energizar o circuito;
-* Verifique as conexões na protoboard antes de realizar o upload;
-* Desconecte a alimentação durante alterações na montagem.
+### 🔩 Resistores obrigatórios
 
+Utilize resistores adequados:
 
-> ⚠️ **Importante:** os GPIOs do ESP32 não devem ser tratados como saídas de potência. O resistor em série com cada LED é obrigatório para limitar a corrente.
+* No divisor de tensão utilizado pelo LDR;
+* Em série com cada LED;
+* Em qualquer outro circuito que necessite de limitação de corrente.
+
+Nunca conecte um LED diretamente a um GPIO do ESP32 sem um resistor de limitação de corrente.
+
+Durante a prototipagem deste projeto, uma ligação incorreta acabou inutilizando o pino **D13**, reforçando a importância de conferir as conexões antes de energizar o circuito.
+
+> ⚠️ **Importante:** os GPIOs do ESP32 não devem ser utilizados como saídas de potência. O uso correto dos resistores é fundamental para evitar danos aos componentes.
+
+### 🔌 Drivers USB
+
+Dependendo do modelo da placa ESP32 utilizada, pode ser necessário instalar manualmente o driver correspondente ao conversor USB/Serial, como o **CP2102**, para que a placa seja reconhecida corretamente pelo Windows e sua porta COM fique disponível na Arduino IDE.
 
 ---
 
 ## 📁 Estrutura do repositório
 
 ```text
-IOT-ESP32-Sala-Inteligente/
+IOT-ESP32-Luminosidade-Plantas/
 │
 ├── Atuador_LED/
-│   └── Código do ESP32 responsável pelo
-│       recebimento dos comandos MQTT
-│       e controle dos 4 LEDs
+│   └── Código do ESP32 receptor
+│       Controle atual dos LEDs indicadores
+│       e confirmação MQTT
 │
 ├── Sensor_de_luz/
-│   └── Código do ESP32 responsável pela
-│       leitura do LDR e publicação
-│       dos dados no broker MQTT
+│   └── Código do ESP32 publicador
+│       Leitura do LDR e envio de telemetria
 │
 └── README.md
 ```
@@ -136,25 +152,25 @@ IOT-ESP32-Sala-Inteligente/
 ### 1. Clonar o repositório
 
 ```bash
-git clone https://github.com/SEU_USUARIO/IOT-ESP32-Sala-Inteligente.git
+git clone https://github.com/SEU_USUARIO/IOT-ESP32-Luminosidade-Plantas.git
 ```
 
-Entre na pasta do projeto:
+Entre na pasta:
 
 ```bash
-cd IOT-ESP32-Sala-Inteligente
+cd IOT-ESP32-Luminosidade-Plantas
 ```
 
 ### 2. Abrir os projetos
 
-Abra os respectivos arquivos `.ino` utilizando a **Arduino IDE**:
+Abra os arquivos `.ino` na **Arduino IDE**:
 
 * `Atuador_LED/`
 * `Sensor_de_luz/`
 
 ### 3. Configurar a rede Wi-Fi
 
-Em **ambos os códigos**, configure as credenciais da rede:
+Em ambos os códigos, configure as credenciais da rede:
 
 ```cpp
 #define WIFI_SSID "SUA_REDE"
@@ -163,29 +179,30 @@ Em **ambos os códigos**, configure as credenciais da rede:
 
 ### 4. Configurar o MQTT
 
-Configure os dados necessários para conexão com o broker **HiveMQ**, incluindo:
+Configure os dados necessários para conexão com o **HiveMQ**:
 
 * Endereço do broker;
 * Porta MQTT;
 * Usuário;
 * Senha;
-* Tópicos utilizados pelo Sensor e pelo Atuador.
+* Tópicos utilizados pelo Sensor;
+* Tópicos utilizados pelo Atuador.
 
-> 🔐 **Recomendação:** não publique senhas reais do Wi-Fi ou MQTT diretamente no repositório. Para o GitHub, utilize variáveis de configuração locais ou um arquivo que esteja incluído no `.gitignore`.
+> 🔐 **Recomendação:** não publique senhas reais do Wi-Fi ou MQTT no repositório. Utilize configurações locais ou arquivos incluídos no `.gitignore`.
 
 ### 5. Configurar a placa
 
 Na Arduino IDE:
 
 1. Selecione **ESP32 Dev Module**;
-2. Selecione a porta COM correspondente ao ESP32;
-3. Configure a velocidade de upload conforme necessário.
+2. Selecione a porta COM correspondente;
+3. Verifique se o driver USB/Serial necessário está instalado.
 
 ### 6. Fazer o upload
 
-Faça o upload dos projetos separadamente:
+Faça o upload de cada firmware para sua respectiva placa física.
 
-**ESP32 1 — Sensor**
+**ESP32 Sensor:**
 
 ```text
 Sensor_de_luz/
@@ -193,7 +210,7 @@ Sensor_de_luz/
 ESP32 Sensor
 ```
 
-**ESP32 2 — Atuador**
+**ESP32 Atuador:**
 
 ```text
 Atuador_LED/
@@ -203,18 +220,18 @@ ESP32 Atuador
 
 ### 7. Monitorar a execução
 
-Abra o **Monitor Serial** da Arduino IDE e utilize:
+Abra o **Monitor Serial** da Arduino IDE utilizando:
 
 ```text
 Baud Rate: 115200
 ```
 
-O monitor permite acompanhar:
+É possível acompanhar:
 
 * Conexão com o Wi-Fi;
 * Conexão com o broker MQTT;
 * Valores capturados pelo LDR;
-* Cena identificada;
+* Classificação das cenas;
 * Mensagens MQTT publicadas;
 * Mensagens MQTT recebidas;
 * Estado dos LEDs;
@@ -224,9 +241,9 @@ O monitor permite acompanhar:
 
 ## 📡 Comunicação MQTT
 
-O sistema utiliza o protocolo **MQTT** para comunicação entre o ESP32 Sensor e o ESP32 Atuador.
+O sistema utiliza o protocolo **MQTT** para realizar a comunicação entre o ESP32 Sensor e o ESP32 Atuador.
 
-O fluxo de mensagens segue o modelo:
+O fluxo atual de mensagens é:
 
 ```text
 Sensor
@@ -248,11 +265,13 @@ LED correspondente
 MQTT Broker
 ```
 
+A utilização do MQTT permite manter o Sensor e o Atuador desacoplados, possibilitando que novos dispositivos sejam adicionados futuramente ao sistema sem a necessidade de alterar diretamente a comunicação entre os dois ESP32.
+
 ---
 
-## 💡 Níveis de iluminação
+## 💡 Níveis de luminosidade
 
-O valor obtido pelo LDR é analisado pelo ESP32 Sensor e convertido em um dos níveis de iluminação definidos pelo projeto.
+O valor obtido pelo LDR é processado pelo **ESP32 Sensor** e classificado em uma das quatro cenas de luminosidade definidas pelo projeto.
 
 ```text
 Luminosidade
@@ -270,97 +289,135 @@ Luminosidade
           │
      ┌────┴────┐
      ▼    ▼    ▼    ▼
-   Nível Nível Nível Nível
+   Cena Cena Cena Cena
      1    2    3    4
      │    │    │    │
      ▼    ▼    ▼    ▼
    LED1 LED2 LED3 LED4
 ```
 
-Os limites matemáticos utilizados para definir cada nível são determinados no firmware do **ESP32 Sensor**.
+Os limites matemáticos utilizados para determinar cada cena são definidos no firmware do **ESP32 Sensor**.
+
+A cena correspondente à maior intensidade luminosa será utilizada futuramente como condição para acionamento da **sombra motorizada**.
 
 ---
 
 ## 🚀 Próximas implementações
 
-Para ampliar o sistema e melhorar a análise dos dados, estão previstas as seguintes funcionalidades:
+O projeto está estruturado para receber melhorias voltadas à automação física, monitoramento e escalabilidade.
+
+### ☀️ Sombra motorizada — Prioridade
+
+Implementação de um **servomotor** conectado ao ESP32 Atuador.
+
+A funcionalidade deverá:
+
+* Integrar a biblioteca `ESP32Servo`;
+* Adicionar o controle do servomotor ao firmware `Atuador_LED.ino`;
+* Criar a estrutura física da cobertura;
+* Detectar a cena de luminosidade extrema;
+* Acionar o servomotor automaticamente;
+* Movimentar a cobertura para criar sombra sobre a planta.
+
+Fluxo esperado:
+
+```text
+LDR
+ │
+ ▼
+Luminosidade extrema
+ │
+ ▼
+ESP32 Sensor
+ │
+ │ MQTT
+ ▼
+MQTT Broker
+ │
+ │ MQTT
+ ▼
+ESP32 Atuador
+ │
+ ▼
+Servomotor
+ │
+ ▼
+Cobertura
+ │
+ ▼
+Sombra sobre a planta
+```
+
+### 🐳 Dockerização do MQTT
+
+Como implementação futura, está prevista a **dockerização do broker MQTT**, substituindo a utilização do HiveMQ externo por um broker MQTT executado em um **container Docker**.
+
+Essa etapa terá como objetivos:
+
+* Executar o broker de forma local e isolada;
+* Facilitar a reprodução do ambiente do projeto;
+* Reduzir a dependência de serviços externos;
+* Facilitar a implantação em diferentes ambientes;
+* Centralizar a infraestrutura de comunicação em containers.
+
+A arquitetura futura poderá seguir o modelo:
+
+```text
+┌─────────────────┐
+│  ESP32 Sensor   │
+└────────┬────────┘
+         │
+         │ Wi-Fi / MQTT
+         ▼
+┌──────────────────────────┐
+│       Docker Host        │
+│                          │
+│  ┌────────────────────┐  │
+│  │    MQTT Broker     │  │
+│  │    Container       │  │
+│  └────────────────────┘  │
+│                          │
+└────────────┬─────────────┘
+             │
+             │ MQTT
+             ▼
+┌─────────────────┐
+│  ESP32 Atuador  │
+└─────────────────┘
+```
 
 ### 📊 Dashboard interativo
 
-Desenvolvimento de uma interface web ou mobile para:
+Criação de uma interface web ou mobile para:
 
-* Visualizar o estado atual dos LEDs;
-* Acompanhar as cenas em tempo real;
-* Exibir informações do sensor;
-* Monitorar o estado da comunicação MQTT.
+* Visualizar a intensidade luminosa;
+* Acompanhar a cena atual;
+* Visualizar o estado dos LEDs;
+* Monitorar o acionamento da sombra;
+* Acompanhar os dados em tempo real.
 
-### 📈 Gráficos de telemetria
+### 🔌 Integração híbrida — Opcional
 
-Implementação de gráficos contendo o histórico da luminosidade captada pelo sensor.
+Estudo da utilização de um **Arduino Uno auxiliar**, conectado ao ESP32 através de comunicação serial **TX/RX**.
 
-Exemplo:
+A proposta seria utilizar o Arduino como controlador auxiliar para determinadas cargas, enquanto o ESP32 permaneceria responsável pela comunicação Wi-Fi/MQTT e pela telemetria.
 
-```text
-Luminosidade
-     │
-     │        ╭──╮
-     │    ╭───╯  ╰──╮
-     │ ───╯         ╰────
-     │
-     └──────────────────────
-             Tempo
-```
-
-### ⏱️ Análise do tempo de ativação
-
-Registrar quanto tempo cada cena permanece ativa durante o dia, permitindo calcular:
-
-* Tempo médio de ativação;
-* Tempo total por nível;
-* Frequência de acionamento;
-* Distribuição das cenas ao longo do dia.
-
-### ☀️ Métricas de luminosidade
-
-Criar métricas para analisar o comportamento da luminosidade no ambiente, como:
-
-* Média de luminosidade;
-* Valor mínimo;
-* Valor máximo;
-* Horários de maior luminosidade;
-* Horários de menor luminosidade;
-* Distribuição dos níveis de iluminação.
+Essa arquitetura será avaliada conforme os requisitos elétricos e de controle do servomotor.
 
 ---
 
 ## 👥 Colaboradores
 
-| Colaborador                     | Contribuição                                                                                       |
-| ------------------------------- | -------------------------------------------------------------------------------------------------- |
-| **Ruan Pablo de Lima Pereira**  | Desenvolvimento do firmware de leitura do sensor e calibração dos limiares matemáticos de luz      |
-| **Rodrigo Bonifácio Conceição** | Implementação da lógica do atuador, controle dos 4 LEDs e integração da confirmação de estado MQTT |
-| **Vinicius Clemente Negherbon** | Estruturação do repositório, arquitetura MQTT, integração dos módulos e testes de comunicação      |
-| **Bianca Barp**                 | Documentação do projeto, montagem dos divisores de tensão e diagrama de ligação                    |
-| **Guilherme Pietro**            | Testes de carga na rede, ajustes de reconexão Wi-Fi e preparação da demonstração                   |
+| Colaborador                     | Contribuição                                                                           |
+| ------------------------------- | -------------------------------------------------------------------------------------- |
+| **Ruan Pablo de Lima Pereira**  | Desenvolvimento do firmware de leitura do sensor e calibração dos limiares de luz      |
+| **Rodrigo Bonifácio Conceição** | Lógica do atuador, controle dos 4 LEDs e integração de estado MQTT                     |
+| **Vinicius Clemente Negherbon** | Estruturação do repositório, arquitetura MQTT, integração dos módulos e testes de rede |
+| **Bianca Barp**                 | Documentação, montagem dos divisores de tensão e diagrama elétrico                     |
+| **Guilherme Pietro**            | Testes de carga na rede, reconexão Wi-Fi e preparação da demonstração                  |
 
 ---
 
 ## 📄 Licença
 
 Este é um **projeto acadêmico** e, atualmente, não possui uma licença de software específica definida.
-
----
-
-## 🎓 Projeto acadêmico
-
-Projeto desenvolvido como atividade acadêmica envolvendo conceitos de:
-
-* Internet das Coisas (IoT);
-* Sistemas embarcados;
-* ESP32;
-* Sensores e atuadores;
-* Comunicação Wi-Fi;
-* Protocolo MQTT;
-* Comunicação JSON;
-* Automação;
-* Arquitetura distribuída.
