@@ -1,0 +1,9 @@
+{
+  "v": 1,
+  "cmd_id": "c-20261103-000124",
+  "origem": "manual",
+  "acao": "definir_modo",
+  "modo": "manual",
+  "duracao_s": 300,
+  "ts": "2026-11-03T19:43:00Z"
+}

@@ -1,0 +1,8 @@
+{
+  "v": 1,
+  "cmd_id": "c-20261103-000202",
+  "origem": "auto",
+  "acao": "definir_modo",
+  "modo": "manual",
+  "duracao_s": 300
+}

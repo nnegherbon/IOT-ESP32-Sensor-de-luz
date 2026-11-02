@@ -1,0 +1,1586 @@
+diff --git a/.gitignore b/.gitignore
+new file mode 100644
+index 0000000..c3e9b34
+--- /dev/null
++++ b/.gitignore
+@@ -0,0 +1,10 @@
++# segredos — nunca versionar (R9)
++secrets.h
++.env
++# artefatos
++__pycache__/
++.pytest_cache/
++node_modules/
++dist/
++docs/_cp12_tmp.html
++*.log
+diff --git a/README.md b/README.md
+index a7c78a6..22fa019 100644
+--- a/README.md
++++ b/README.md
+@@ -1,423 +1,109 @@
+-# 💡 IOT-ESP32-Luminosidade-Plantas
++# 🌿 Luz Ambiente: proteção solar automática para plantas sensíveis
+ 
+-Repositório referente ao projeto de **Internet das Coisas (IoT)** desenvolvido com **ESP32**, focado em solucionar o problema de exposição solar inadequada no cultivo de plantas.
++Projeto de **Internet das Coisas** com dois **ESP32** comunicando por **MQTT**. Um nó mede a luz que chega à planta e o
++outro sinaliza a situação e, na versão N3, **fecha uma cobertura de sombra motorizada** quando o sol fica forte demais.
+ 
+-O sistema utiliza um **sensor de luz LDR** para medir a intensidade luminosa do ambiente e, atualmente, aciona um **painel de 4 LEDs indicadores** como alerta. Como evolução do projeto, está planejada a implementação de uma **sombra motorizada utilizando um servomotor**, capaz de atuar fisicamente no ambiente quando forem identificados níveis extremos de luminosidade.
++> **Entrega atual: N2 (CP12, desenho e documentação).** O documento completo está em
++> [`docs/CP12_PROJETO_v1.0.md`](docs/CP12_PROJETO_v1.0.md) e o PDF entregue,
++> [`docs/CP12_EQUIPE-X_PROJETO_v1.0.pdf`](docs/CP12_EQUIPE-X_PROJETO_v1.0.pdf), é gerado desse mesmo arquivo.
++> O contrato MQTT foi **congelado como v1** em [`contrato/v1/`](contrato/v1/CONTRATO_v1.md).
+ 
+-O projeto utiliza comunicação **Wi-Fi + MQTT**, com o **HiveMQ** atuando como broker, mantendo o módulo responsável pela leitura do sensor fisicamente separado do módulo responsável pelo acionamento.
++## Problema e usuário
+ 
+----
++Plantas sensíveis (samambaias, orquídeas, mudas, suculentas recém-transplantadas) **queimam as folhas e desidratam**
++quando pegam sol direto e intenso. O **usuário** é quem cultiva essas plantas em casa, na varanda, em horta urbana
++ou estufa pequena e não está ao lado delas o dia todo para puxar uma sombra na hora certa.
+ 
+-## 📋 Sobre o projeto e problema solucionado
++**Proposta de valor:** *a planta se protege sozinha do sol forte e você acompanha pelo celular*. O sistema mede a luz,
++fecha a sombra quando a exposição extrema se prolonga, reabre quando passa, mostra quanto tempo a planta ficou em sol
++intenso e avisa se algo falhar. Também permite controle manual.
+ 
+-O objetivo é desenvolver um sistema IoT desacoplado para auxiliar na proteção de plantas sensíveis, que podem sofrer danos, queimaduras nas folhas e desidratação quando expostas a níveis excessivos de luz e calor provenientes da exposição solar direta.
++## Estado atual (herdado da N1)
+ 
+-O sistema foi desenvolvido considerando dois estágios principais:
++| Funciona | Limitação |
++|---|---|
++| ESP32 sensor lê o LDR (GPIO34) e classifica em 4 cenas: escuro < 150, ambiente 150–399, alta 400–999, extrema ≥ 1000 | decisão fixa no firmware, sem histerese; valor bruto não é publicado |
++| Publica `{"cena":"…"}` no HiveMQ público só quando a cena muda | broker sem senha; contrato sem versão nem ID de dispositivo |
++| ESP32 atuador acende o LED da cena (4 LEDs) e publica confirmação retida | só alerta visual; confirmação não se liga ao comando |
++| Dois módulos fisicamente separados (sistema distribuído real) | sem backend, banco, interface, presença/LWT ou comando remoto |
+ 
+-### 🌱 Estágio atual — Monitoramento e alerta
++O código da N1 está em [`firmware/n1/`](firmware/n1/). A senha do Wi-Fi, que estava versionada, foi removida.
+ 
+-O sistema monitora continuamente a intensidade luminosa do ambiente.
++## Para onde o upgrade vai (N3)
+ 
+-O **ESP32 Sensor** realiza a leitura do LDR, processa o valor obtido, classifica a luminosidade em uma das **4 cenas de luz** e publica essa informação no broker MQTT.
++| Camada | N1 → N3 |
++|---|---|
++| Hardware | + **servo SG90** para a cobertura de sombra (fonte 5 V própria, GND comum, 470 µF, pull-down no sinal) |
++| Firmware | sensor só mede e publica telemetria; atuador com **máquina de estados AUTO / MANUAL / SEGURO**, intertravamento, LWT e OTA |
++| Comunicação | **contrato MQTT v1** versionado, com ID de dispositivo, ack por `cmd_id` e estado retido; **Mosquitto** com usuário, ACL e TLS |
++| Backend + banco | FastAPI + PostgreSQL: histórico, **decisão remota** (limites configuráveis + histerese), comandos com confirmação, alertas, Telegram |
++| Interface | painel web em tempo real com gráficos, histórico e **controle manual** com login por perfil |
++| Orquestração | `docker compose up` sobe broker, banco, backend e interface |
+ 
+-O **ESP32 Atuador** recebe a cena correspondente e aciona o LED relacionado ao nível de luminosidade detectado, permitindo uma identificação visual do estado atual do ambiente.
++### Arquitetura-alvo
+ 
+-### ☀️ Ação física — Em desenvolvimento
++![Arquitetura-alvo](docs/diagramas/arquitetura.png)
+ 
+-Como próxima evolução do projeto, será implementado um **servomotor no Nó Atuador**.
++Mais diagramas: [fluxo do dado](docs/diagramas/fluxo_dado.png) · [fluxo do comando](docs/diagramas/fluxo_comando.png) ·
++[fluxograma do atuador](docs/diagramas/fluxograma_atuador.png) · [fluxograma do sensor](docs/diagramas/fluxograma_sensor.png) ·
++esquema elétrico do [nó sensor](docs/hardware/esquema_eletrico/esquema_sensor.png) e do [nó atuador](docs/hardware/esquema_eletrico/esquema_atuador.png) ·
++[mapa de pinos](docs/hardware/mapa_de_pinos.md).
+ 
+-Quando a cena correspondente à **luminosidade extrema** for detectada, o servomotor deverá movimentar uma cobertura física, criando uma área de sombra sobre a planta e reduzindo sua exposição direta à luz solar.
+-
+----
+-
+-## 🔄 Fluxo do sistema — Atual e futuro
+-
+-```text
+-┌─────────────────┐
+-│   Sensor LDR    │
+-│                 │
+-│  ESP32 Sensor   │
+-└────────┬────────┘
+-         │
+-         │ Wi-Fi / MQTT
+-         ▼
+-┌─────────────────┐
+-│     HiveMQ      │
+-│   MQTT Broker   │
+-└────────┬────────┘
+-         │
+-         │ Wi-Fi / MQTT
+-         ▼
+-┌─────────────────┐
+-│  ESP32 Atuador  │
+-└────────┬────────┘
+-         │
+-         ├──► Painel 4 LEDs
+-         │    Monitoramento visual
+-         │    ✅ Implementado
+-         │
+-         └──► Servomotor
+-              Sombra física
+-              🚧 Em desenvolvimento
+-```
+-
+----
+-
+-## 🏗️ Arquitetura do sistema
+-
+-Para garantir que o projeto cumpra a premissa de uma aplicação IoT distribuída, e não apenas uma automação local, o sistema possui dois módulos ESP32 fisicamente separados, interligados através da comunicação Wi-Fi e do protocolo MQTT.
+-
+-### 📡 Módulo Sensor — ESP32 1
+-
+-Responsável por:
+-
+-* Realizar a leitura do sensor LDR;
+-* Processar os valores de luminosidade;
+-* Classificar a luminosidade nas 4 cenas definidas pelo projeto;
+-* Conectar-se à rede Wi-Fi;
+-* Publicar os dados no broker MQTT;
+-* Estruturar as informações utilizando **JSON**.
+-
+-### 💡 Módulo Atuador — ESP32 2
+-
+-Responsável por:
+-
+-* Conectar-se ao broker MQTT;
+-* Escutar os tópicos de comando;
+-* Interpretar as mensagens recebidas;
+-* Desligar o LED correspondente à cena anterior;
+-* Acionar o LED da nova cena recebida;
+-* Publicar uma confirmação do estado executado no broker MQTT;
+-* **Futuramente**, controlar o servomotor responsável pela movimentação da sombra.
+-
+-### 🔗 Comunicação
+-
+-A comunicação entre os módulos ocorre através do seguinte fluxo:
+-
+-**ESP32 Sensor → Wi-Fi → MQTT HiveMQ → Wi-Fi → ESP32 Atuador**
+-
+-As mensagens são estruturadas utilizando **JSON**, permitindo uma comunicação organizada e facilitando futuras expansões do sistema.
+-
+----
+-
+-## ⚠️ Precauções de hardware e instalação
+-
+-### 🔌 Sensibilidade do ESP32
+-
+-O **ESP32 trabalha com lógica de 3,3 V** e possui limitações elétricas que devem ser respeitadas durante a montagem do circuito.
+-
+-Por isso, é necessário ter atenção especial à alimentação, corrente e tensão aplicadas aos seus GPIOs.
+-
+-### 🔩 Resistores obrigatórios
+-
+-Utilize resistores adequados:
+-
+-* No divisor de tensão utilizado pelo LDR;
+-* Em série com cada LED;
+-* Em qualquer outro circuito que necessite de limitação de corrente.
+-
+-Nunca conecte um LED diretamente a um GPIO do ESP32 sem um resistor de limitação de corrente.
+-
+-Durante a prototipagem deste projeto, uma ligação incorreta acabou inutilizando o pino **D13**, reforçando a importância de conferir as conexões antes de energizar o circuito.
+-
+-> ⚠️ **Importante:** os GPIOs do ESP32 não devem ser utilizados como saídas de potência. O uso correto dos resistores é fundamental para evitar danos aos componentes.
+-
+-### 🔌 Drivers USB
+-
+-Dependendo do modelo da placa ESP32 utilizada, pode ser necessário instalar manualmente o driver correspondente ao conversor USB/Serial, como o **CP2102**, para que a placa seja reconhecida corretamente pelo Windows e sua porta COM fique disponível na Arduino IDE.
+-
+----
+-
+-## 📁 Estrutura do repositório
++## Estrutura do repositório
+ 
+ ```text
+-IOT-ESP32-Luminosidade-Plantas/
+-│
+-├── Atuador_LED/
+-│   └── Código do ESP32 receptor
+-│       Controle atual dos LEDs indicadores
+-│       e confirmação MQTT
+-│
+-├── Sensor_de_luz/
+-│   └── Código do ESP32 publicador
+-│       Leitura do LDR e envio de telemetria
+-│
+-└── README.md
+-```
+-
+----
+-
+-## ▶️ Como executar
+-
+-### 1. Clonar o repositório
+-
+-```bash
+-git clone https://github.com/SEU_USUARIO/IOT-ESP32-Luminosidade-Plantas.git
++├── README.md
++├── docs/
++│   ├── CP12_PROJETO_v1.0.md          documento do checkpoint (fonte do PDF)
++│   ├── CP12_EQUIPE-X_PROJETO_v1.0.pdf PDF entregue no Teams
++│   ├── gerar_pdf.py                  gera o PDF a partir do .md
++│   ├── diagramas/                    arquitetura, fluxos e fluxogramas (.mmd fonte + .svg/.png)
++│   └── hardware/
++│       ├── mapa_de_pinos.md
++│       └── esquema_eletrico/         esquema.py (schemdraw) + esquema_sensor/atuador .svg/.png
++├── contrato/v1/                      contrato MQTT congelado
++│   ├── CONTRATO_v1.md
++│   ├── schemas/*.schema.json         JSON Schema de cada mensagem
++│   ├── exemplos/{validos,invalidos}/ payloads de exemplo
++│   └── validar.py                    confere os exemplos contra os schemas
++├── firmware/n1/                      firmware entregue na N1 (Sensor_de_luz, Atuador_LED)
++└── dashboard-prototipo/              protótipo adiantado de backend + banco + interface (contrato N1)
+ ```
+ 
+-Entre na pasta:
++## Como reproduzir os artefatos desta entrega
+ 
+ ```bash
+-cd IOT-ESP32-Luminosidade-Plantas
+-```
+-
+-### 2. Abrir os projetos
+-
+-Abra os arquivos `.ino` na **Arduino IDE**:
+-
+-* `Atuador_LED/`
+-* `Sensor_de_luz/`
+-
+-### 3. Configurar a rede Wi-Fi
+-
+-Em ambos os códigos, configure as credenciais da rede:
+-
+-```cpp
+-#define WIFI_SSID "SUA_REDE"
+-#define WIFI_PASSWORD "SUA_SENHA"
++pip install jsonschema schemdraw matplotlib markdown playwright
++python -m playwright install chromium
++npm install -g @mermaid-js/mermaid-cli
++
++python contrato/v1/validar.py                         # valida os exemplos do contrato v1
++python docs/hardware/esquema_eletrico/esquema.py      # redesenha os esquemas elétricos
++for f in docs/diagramas/*.mmd; do mmdc -i "$f" -o "${f%.mmd}.png" -b white -s 2; mmdc -i "$f" -o "${f%.mmd}.svg" -b white; done
++python docs/gerar_pdf.py EQUIPE-X                     # gera o PDF do CP12 a partir do .md
+ ```
+ 
+-### 4. Configurar o MQTT
+-
+-Configure os dados necessários para conexão com o **HiveMQ**:
+-
+-* Endereço do broker;
+-* Porta MQTT;
+-* Usuário;
+-* Senha;
+-* Tópicos utilizados pelo Sensor;
+-* Tópicos utilizados pelo Atuador.
+-
+-> 🔐 **Recomendação:** não publique senhas reais do Wi-Fi ou MQTT no repositório. Utilize configurações locais ou arquivos incluídos no `.gitignore`.
+-
+-### 5. Configurar a placa
+-
+-Na Arduino IDE:
+-
+-1. Selecione **ESP32 Dev Module**;
+-2. Selecione a porta COM correspondente;
+-3. Verifique se o driver USB/Serial necessário está instalado.
+-
+-### 6. Fazer o upload
+-
+-Faça o upload de cada firmware para sua respectiva placa física.
+-
+-**ESP32 Sensor:**
+-
+-```text
+-Sensor_de_luz/
+-        ↓
+-ESP32 Sensor
+-```
+-
+-**ESP32 Atuador:**
+-
+-```text
+-Atuador_LED/
+-        ↓
+-ESP32 Atuador
+-```
+-
+-### 7. Monitorar a execução
+-
+-Abra o **Monitor Serial** da Arduino IDE utilizando:
+-
+-```text
+-Baud Rate: 115200
+-```
+-
+-É possível acompanhar:
+-
+-* Conexão com o Wi-Fi;
+-* Conexão com o broker MQTT;
+-* Valores capturados pelo LDR;
+-* Classificação das cenas;
+-* Mensagens MQTT publicadas;
+-* Mensagens MQTT recebidas;
+-* Estado dos LEDs;
+-* Confirmações enviadas pelo Atuador.
+-
+----
+-
+-## 📡 Comunicação MQTT
+-
+-O sistema utiliza o protocolo **MQTT** para realizar a comunicação entre o ESP32 Sensor e o ESP32 Atuador.
+-
+-O fluxo atual de mensagens é:
+-
+-```text
+-Sensor
+-   │
+-   │ Publica cena
+-   ▼
+-MQTT Broker
+-   │
+-   │ Entrega mensagem
+-   ▼
+-Atuador
+-   │
+-   │ Executa cena
+-   ▼
+-LED correspondente
+-   │
+-   │ Publica confirmação
+-   ▼
+-MQTT Broker
+-```
+-
+-A utilização do MQTT permite manter o Sensor e o Atuador desacoplados, possibilitando que novos dispositivos sejam adicionados futuramente ao sistema sem a necessidade de alterar diretamente a comunicação entre os dois ESP32.
+-
+----
+-
+-## 💡 Níveis de luminosidade
+-
+-O valor obtido pelo LDR é processado pelo **ESP32 Sensor** e classificado em uma das quatro cenas de luminosidade definidas pelo projeto.
+-
+-```text
+-Luminosidade
+-     │
+-     ▼
+-┌───────────────┐
+-│ Leitura do LDR│
+-└───────┬───────┘
+-        │
+-        ▼
+-┌───────────────────┐
+-│ Classificação     │
+-│ da luminosidade   │
+-└─────────┬─────────┘
+-          │
+-     ┌────┴────┐
+-     ▼    ▼    ▼    ▼
+-   Cena Cena Cena Cena
+-     1    2    3    4
+-     │    │    │    │
+-     ▼    ▼    ▼    ▼
+-   LED1 LED2 LED3 LED4
+-```
+-
+-Os limites matemáticos utilizados para determinar cada cena são definidos no firmware do **ESP32 Sensor**.
+-
+-A cena correspondente à maior intensidade luminosa será utilizada futuramente como condição para acionamento da **sombra motorizada**.
+-
+----
+-
+-## 🚀 Próximas implementações
+-
+-O projeto está estruturado para receber melhorias voltadas à automação física, monitoramento e escalabilidade.
+-
+-### ☀️ Sombra motorizada — Prioridade
+-
+-Implementação de um **servomotor** conectado ao ESP32 Atuador.
+-
+-A funcionalidade deverá:
+-
+-* Integrar a biblioteca `ESP32Servo`;
+-* Adicionar o controle do servomotor ao firmware `Atuador_LED.ino`;
+-* Criar a estrutura física da cobertura;
+-* Detectar a cena de luminosidade extrema;
+-* Acionar o servomotor automaticamente;
+-* Movimentar a cobertura para criar sombra sobre a planta.
+-
+-Fluxo esperado:
+-
+-```text
+-LDR
+- │
+- ▼
+-Luminosidade extrema
+- │
+- ▼
+-ESP32 Sensor
+- │
+- │ MQTT
+- ▼
+-MQTT Broker
+- │
+- │ MQTT
+- ▼
+-ESP32 Atuador
+- │
+- ▼
+-Servomotor
+- │
+- ▼
+-Cobertura
+- │
+- ▼
+-Sombra sobre a planta
+-```
+-
+-### 🐳 Dockerização do MQTT
+-
+-Como implementação futura, está prevista a **dockerização do broker MQTT**, substituindo a utilização do HiveMQ externo por um broker MQTT executado em um **container Docker**.
+-
+-Essa etapa terá como objetivos:
+-
+-* Executar o broker de forma local e isolada;
+-* Facilitar a reprodução do ambiente do projeto;
+-* Reduzir a dependência de serviços externos;
+-* Facilitar a implantação em diferentes ambientes;
+-* Centralizar a infraestrutura de comunicação em containers.
+-
+-A arquitetura futura poderá seguir o modelo:
+-
+-```text
+-┌─────────────────┐
+-│  ESP32 Sensor   │
+-└────────┬────────┘
+-         │
+-         │ Wi-Fi / MQTT
+-         ▼
+-┌──────────────────────────┐
+-│       Docker Host        │
+-│                          │
+-│  ┌────────────────────┐  │
+-│  │    MQTT Broker     │  │
+-│  │    Container       │  │
+-│  └────────────────────┘  │
+-│                          │
+-└────────────┬─────────────┘
+-             │
+-             │ MQTT
+-             ▼
+-┌─────────────────┐
+-│  ESP32 Atuador  │
+-└─────────────────┘
+-```
+-
+-### 📊 Dashboard interativo
+-
+-Criação de uma interface web ou mobile para:
+-
+-* Visualizar a intensidade luminosa;
+-* Acompanhar a cena atual;
+-* Visualizar o estado dos LEDs;
+-* Monitorar o acionamento da sombra;
+-* Acompanhar os dados em tempo real.
+-
+-### 🔌 Integração híbrida — Opcional
+-
+-Estudo da utilização de um **Arduino Uno auxiliar**, conectado ao ESP32 através de comunicação serial **TX/RX**.
+-
+-A proposta seria utilizar o Arduino como controlador auxiliar para determinadas cargas, enquanto o ESP32 permaneceria responsável pela comunicação Wi-Fi/MQTT e pela telemetria.
+-
+-Essa arquitetura será avaliada conforme os requisitos elétricos e de controle do servomotor.
++Instruções completas de instalação e execução do sistema são exigidas na N3 (R11). O protótipo já tem as dele em
++[`dashboard-prototipo/README.md`](dashboard-prototipo/README.md).
+ 
+----
++## ⚠️ Precauções de hardware (lições da N1)
+ 
+-## 👥 Colaboradores
++- O ESP32 trabalha com **3,3 V**: nenhum sinal de 5 V vai direto a um GPIO.
++- **Todo LED com resistor em série**; nenhuma carga alimentada por GPIO.
++- Servo **sempre em fonte própria** com GND comum, nunca no 3V3 ou no VIN.
++- Durante a N1 uma ligação errada inutilizou o **GPIO13**, que fica fora do projeto.
++- Placas com conversor USB **CP2102** podem precisar de driver no Windows para a porta COM aparecer.
+ 
+-| Colaborador                     | Contribuição                                                                           |
+-| ------------------------------- | -------------------------------------------------------------------------------------- |
+-| **Ruan Pablo de Lima Pereira**  | Desenvolvimento do firmware de leitura do sensor e calibração dos limiares de luz      |
+-| **Rodrigo Bonifácio Conceição** | Lógica do atuador, controle dos 4 LEDs e integração de estado MQTT                     |
+-| **Vinicius Clemente Negherbon** | Estruturação do repositório, arquitetura MQTT, integração dos módulos e testes de rede |
+-| **Bianca Barp**                 | Documentação, montagem dos divisores de tensão e diagrama elétrico                     |
+-| **Guilherme Pietro**            | Testes de carga na rede, reconexão Wi-Fi e preparação da demonstração                  |
++## 👥 Equipe
+ 
+----
++| Integrante | Responsabilidade (até a entrega completa) |
++|---|---|
++| Ruan Pablo de Lima Pereira | nó sensor: divisor/ADC, fluxograma do sensor e fluxo do dado, parâmetros de decisão; documento CP12 e PDF |
++| Rodrigo Bonifácio Conceição | nó atuador: máquina de estados, intertravamento, servo |
++| Vinicius Clemente Negherbon | contrato MQTT v1, repositório |
++| Bianca Barp | esquema elétrico, BOM, mapa de pinos, revisão do documento |
++| Guilherme Pietro | arquitetura-alvo, fluxo do comando, protótipo do dashboard, plano de falhas, cronograma e riscos |
+ 
+ ## 📄 Licença
+ 
+-Este é um **projeto acadêmico** e, atualmente, não possui uma licença de software específica definida.
++Projeto acadêmico, sem licença de software definida.
+diff --git a/contrato/v1/CONTRATO_v1.md b/contrato/v1/CONTRATO_v1.md
+new file mode 100644
+index 0000000..d0d9331
+--- /dev/null
++++ b/contrato/v1/CONTRATO_v1.md
+@@ -0,0 +1,160 @@
++# Contrato MQTT v1 (congelado)
++
++| | |
++|---|---|
++| Versão | **v1.0, congelada em 29/10/2026** |
++| Prefixo | `luzambiente/v1/` |
++| Substitui | contrato informal da N1 (`iot/luzambiente/atuador/luz/comando` e `iot/luzambiente/atuador/status`) |
++| Validação | `schemas/*.schema.json` (JSON Schema 2020-12) + `python contrato/v1/validar.py` |
++
++"Congelado" quer dizer que tópicos, campos obrigatórios, tipos e valores permitidos **não mudam** até a N3.
++Campos novos e opcionais podem ser acrescentados, porque todo consumidor ignora campos desconhecidos.
++Qualquer mudança incompatível (renomear, remover, mudar tipo ou semântica) cria o prefixo `luzambiente/v2/`
++e mantém a v1 funcionando durante a transição.
++
++## 1. Árvore de tópicos
++
++```text
++luzambiente/v1/
++├── backend/
++│   └── status                    backend → todos       retido · QoS 1 · LWT
++├── sensor/{device_id}/
++│   ├── status                    sensor → todos        retido · QoS 1 · LWT
++│   └── telemetria                sensor → backend      QoS 0 · a cada 2 s
++└── atuador/{device_id}/
++    ├── status                    atuador → todos       retido · QoS 1 · LWT
++    ├── comando                   backend → atuador     QoS 1
++    ├── ack                       atuador → backend     QoS 1 · 1 por comando recebido
++    └── estado                    atuador → backend     retido · QoS 1 · na mudança + a cada 30 s
++```
++
++- `{device_id}`: `^[a-z][a-z0-9-]{2,31}$`, igual ao campo `device` do payload e ao usuário MQTT do dispositivo.
++  Nesta entrega são `sensor01` e `atuador01`. Novos pares são só novos IDs (R13), sem mudar o contrato.
++- O par sensor ↔ atuador (qual sensor decide qual atuador) é uma configuração do backend e não aparece nos tópicos.
++
++## 2. Payloads
++
++Todos são JSON UTF-8, com no máximo 512 bytes e o campo obrigatório `"v": 1`.
++
++### 2.1 `status` (presença / LWT)
++
++Publicado retido logo após conectar. O mesmo tópico é registrado como *Last Will* com `online:false`,
++então o broker o publica sozinho se o dispositivo cair sem se desconectar (keepalive 15 s, ou seja, ~22 s).
++
++```json
++{"v":1,"device":"sensor01","online":true,"fw":"1.0.0","ip":"192.168.0.21","rssi":-61}
++```
++```json
++{"v":1,"device":"sensor01","online":false}
++```
++
++### 2.2 `telemetria` (sensor → backend)
++
++```json
++{"v":1,"device":"sensor01","seq":1024,"uptime_ms":2048312,"ldr_raw":812,"amostras":16,"rssi":-61}
++```
++
++| Campo | Tipo | Regra |
++|---|---|---|
++| `seq` | inteiro ≥ 0 | incrementa a cada envio e volta a 0 no boot; uma lacuna indica perda |
++| `uptime_ms` | inteiro | `millis()` (o ESP32 não tem RTC; o backend carimba a hora de recebimento) |
++| `ldr_raw` | 0–4095 | média de `amostras` leituras de `analogRead(34)`, ADC1 de 12 bits, valor bruto (não é lux) |
++| `amostras` | 1–64 | padrão 16 |
++| `rssi` | dBm | opcional |
++
++O sensor **não classifica e não decide**: na v1 a classificação em cenas sai do firmware e vai para o backend (R8).
++
++### 2.3 `comando` (backend → atuador)
++
++Somente o backend publica neste tópico, e a ACL impede qualquer outro cliente.
++
++```json
++{"v":1,"cmd_id":"c-20261103-000123","origem":"auto","acao":"aplicar","cena":"extrema","sombra":"fechada","ts":"2026-11-03T19:42:10Z"}
++```
++```json
++{"v":1,"cmd_id":"c-20261103-000124","origem":"manual","acao":"definir_modo","modo":"manual","duracao_s":300,"ts":"2026-11-03T19:43:00Z"}
++```
++```json
++{"v":1,"cmd_id":"c-20261103-000126","origem":"manual","acao":"definir_modo","modo":"auto","ts":"2026-11-03T19:45:00Z"}
++```
++
++| Campo | Regra |
++|---|---|
++| `cmd_id` | `c-AAAAMMDD-NNNNNN`, gerado pelo backend; correlaciona comando e ack e serve de chave de idempotência |
++| `origem` | `auto` = motor de decisão do backend · `manual` = operador na interface |
++| `acao` | `aplicar` exige `cena` + `sombra` · `definir_modo` exige `modo` (e `duracao_s` se `manual`) e só existe com `origem:"manual"` |
++| `duracao_s` | 60–1800, padrão 300; é o timeout do modo manual |
++| `ts` | hora UTC do backend, apenas informativa |
++
++### 2.4 `ack` (atuador → backend)
++
++Todo comando recebido gera **exatamente um** ack, mesmo quando é rejeitado.
++
++```json
++{"v":1,"device":"atuador01","cmd_id":"c-20261103-000123","resultado":"executado","motivo":null,"uptime_ms":3100422}
++```
++```json
++{"v":1,"device":"atuador01","cmd_id":"c-20261103-000127","resultado":"rejeitado","motivo":"modo_seguro","uptime_ms":3160001}
++```
++
++| `motivo` | Quando |
++|---|---|
++| `null` | `resultado:"executado"` |
++| `payload_invalido` | JSON inválido, `v` ≠ 1 ou campo obrigatório ausente (se `cmd_id` puder ser lido) |
++| `modo_seguro` | atuador em SEGURO: só aceita sair por si quando as condições normalizam |
++| `modo_incompativel` | `origem:"auto"` em MANUAL, ou `origem:"manual"` + `aplicar` em AUTO |
++| `intertravamento` | servo moveu há menos de 5 s |
++
++**Idempotência:** se chegar um `cmd_id` já processado (o QoS 1 pode entregar duplicado, e o backend retransmite uma vez),
++o atuador **não executa de novo** e republica o ack original.
++
++### 2.5 `estado` (atuador → backend, retido)
++
++```json
++{"v":1,"device":"atuador01","modo":"auto","cena":"extrema","leds":[true,true,true,true],"sombra":"fechada",
++ "servo_graus":90,"manual_restante_s":null,"ultimo_cmd_id":"c-20261103-000123","uptime_ms":3100480}
++```
++
++| Campo | Regra |
++|---|---|
++| `modo` | `auto` · `manual` · `seguro` |
++| `cena` | cena aplicada, ou `null` antes do primeiro comando |
++| `leds` | `[LED1 GPIO27, LED2 GPIO26, LED3 GPIO25, LED4 GPIO33]`, o que foi escrito nos pinos |
++| `sombra` / `servo_graus` | `aberta`/0° ou `fechada`/90°; ambos `null` = posição desconhecida (após o boot, servo sem PWM) |
++| `manual_restante_s` | segundos até o timeout do modo manual; `null` fora do manual |
++
++Mapeamento cena → LEDs, mantido da N1: escuro → LED 2 · ambiente → LED 1 · alta → LED 3 · extrema → LEDs 1 a 4.
++
++## 3. QoS, retenção e tempos
++
++| Tópico | QoS | Retido | Frequência | Tempo-limite usado pelo consumidor |
++|---|---|---|---|---|
++| `*/status` | 1 | sim | ao conectar + LWT | — |
++| `sensor/*/telemetria` | 0 | não | 2 s | backend considera o sensor parado após 10 s sem telemetria |
++| `atuador/*/comando` | 1 | **não** (um comando velho nunca é reexecutado ao reconectar) | sob demanda | — |
++| `atuador/*/ack` | 1 | não | 1 por comando | backend espera 3 s, retransmite 1× com o mesmo `cmd_id` e então marca *sem confirmação* |
++| `atuador/*/estado` | 1 | sim | mudança + 30 s | backend considera o atuador mudo após 90 s |
++
++Keepalive MQTT de 15 s em todos os clientes.
++
++## 4. Perfis de acesso (ACL do broker)
++
++| Usuário MQTT | Publica | Assina |
++|---|---|---|
++| `sensor01` | `luzambiente/v1/sensor/sensor01/#` | — |
++| `atuador01` | `luzambiente/v1/atuador/atuador01/{status,ack,estado}` | `luzambiente/v1/atuador/atuador01/comando`, `luzambiente/v1/backend/status`, `luzambiente/v1/sensor/+/status` |
++| `backend` | `luzambiente/v1/atuador/+/comando`, `luzambiente/v1/backend/status` | `luzambiente/v1/#` |
++
++Um dispositivo só escreve no próprio ramo, e só o backend comanda. As senhas ficam fora do repositório
++(`secrets.h` no firmware e `.env` no backend, ambos no `.gitignore`).
++
++## 5. Diferenças em relação à N1
++
++| N1 | v1 | Motivo |
++|---|---|---|
++| sensor classifica e publica `{"cena":…}` | sensor publica `ldr_raw`; o backend decide | decisão remota (R8), valor bruto disponível para histórico |
++| sem identificação no payload do sensor | `device` no tópico e no payload | múltiplos dispositivos (R13) |
++| `{"estado":"alta_executada"}` | `ack` com `cmd_id` + `estado` estruturado | casar comando ↔ confirmação (R7) |
++| sem presença | `status` retido + LWT | detectar queda de dispositivo (R10) |
++| sem versão | `"v":1` + prefixo `/v1/` | evolução sem quebrar |
++| broker público, sem senha | usuário/senha + ACL por dispositivo | segurança (R9/R16) |
+diff --git a/contrato/v1/exemplos/invalidos/ack__ack_rejeitado_sem_motivo.json b/contrato/v1/exemplos/invalidos/ack__ack_rejeitado_sem_motivo.json
+new file mode 100644
+index 0000000..3b4c7d4
+--- /dev/null
++++ b/contrato/v1/exemplos/invalidos/ack__ack_rejeitado_sem_motivo.json
+@@ -0,0 +1,7 @@
++{
++  "v": 1,
++  "device": "atuador01",
++  "cmd_id": "c-20261103-000203",
++  "resultado": "rejeitado",
++  "motivo": null
++}
+\ No newline at end of file
+diff --git a/contrato/v1/exemplos/invalidos/comando__comando_aplicar_sem_sombra.json b/contrato/v1/exemplos/invalidos/comando__comando_aplicar_sem_sombra.json
+new file mode 100644
+index 0000000..0a8fda9
+--- /dev/null
++++ b/contrato/v1/exemplos/invalidos/comando__comando_aplicar_sem_sombra.json
+@@ -0,0 +1,7 @@
++{
++  "v": 1,
++  "cmd_id": "c-20261103-000200",
++  "origem": "auto",
++  "acao": "aplicar",
++  "cena": "alta"
++}
+\ No newline at end of file
+diff --git a/contrato/v1/exemplos/invalidos/comando__comando_cena_n1.json b/contrato/v1/exemplos/invalidos/comando__comando_cena_n1.json
+new file mode 100644
+index 0000000..d8c2f5e
+--- /dev/null
++++ b/contrato/v1/exemplos/invalidos/comando__comando_cena_n1.json
+@@ -0,0 +1,3 @@
++{
++  "cena": "extrema"
++}
+\ No newline at end of file
+diff --git a/contrato/v1/exemplos/invalidos/comando__comando_manual_sem_duracao.json b/contrato/v1/exemplos/invalidos/comando__comando_manual_sem_duracao.json
+new file mode 100644
+index 0000000..6d9b998
+--- /dev/null
++++ b/contrato/v1/exemplos/invalidos/comando__comando_manual_sem_duracao.json
+@@ -0,0 +1,7 @@
++{
++  "v": 1,
++  "cmd_id": "c-20261103-000201",
++  "origem": "manual",
++  "acao": "definir_modo",
++  "modo": "manual"
++}
+\ No newline at end of file
+diff --git a/contrato/v1/exemplos/invalidos/comando__comando_modo_pelo_auto.json b/contrato/v1/exemplos/invalidos/comando__comando_modo_pelo_auto.json
+new file mode 100644
+index 0000000..81919e7
+--- /dev/null
++++ b/contrato/v1/exemplos/invalidos/comando__comando_modo_pelo_auto.json
+@@ -0,0 +1,8 @@
++{
++  "v": 1,
++  "cmd_id": "c-20261103-000202",
++  "origem": "auto",
++  "acao": "definir_modo",
++  "modo": "manual",
++  "duracao_s": 300
++}
+\ No newline at end of file
+diff --git a/contrato/v1/exemplos/invalidos/estado__estado_servo_fora.json b/contrato/v1/exemplos/invalidos/estado__estado_servo_fora.json
+new file mode 100644
+index 0000000..45e096a
+--- /dev/null
++++ b/contrato/v1/exemplos/invalidos/estado__estado_servo_fora.json
+@@ -0,0 +1,17 @@
++{
++  "v": 1,
++  "device": "atuador01",
++  "modo": "auto",
++  "cena": "alta",
++  "leds": [
++    false,
++    false,
++    true,
++    false
++  ],
++  "sombra": "aberta",
++  "servo_graus": 180,
++  "manual_restante_s": null,
++  "ultimo_cmd_id": null,
++  "uptime_ms": 1
++}
+\ No newline at end of file
+diff --git a/contrato/v1/exemplos/invalidos/telemetria__telemetria_fora_adc.json b/contrato/v1/exemplos/invalidos/telemetria__telemetria_fora_adc.json
+new file mode 100644
+index 0000000..e5a1c73
+--- /dev/null
++++ b/contrato/v1/exemplos/invalidos/telemetria__telemetria_fora_adc.json
+@@ -0,0 +1,7 @@
++{
++  "v": 1,
++  "device": "sensor01",
++  "seq": 1,
++  "uptime_ms": 10,
++  "ldr_raw": 5000
++}
+\ No newline at end of file
+diff --git a/contrato/v1/exemplos/invalidos/telemetria__telemetria_sem_versao.json b/contrato/v1/exemplos/invalidos/telemetria__telemetria_sem_versao.json
+new file mode 100644
+index 0000000..4a8888d
+--- /dev/null
++++ b/contrato/v1/exemplos/invalidos/telemetria__telemetria_sem_versao.json
+@@ -0,0 +1,6 @@
++{
++  "device": "sensor01",
++  "seq": 1,
++  "uptime_ms": 10,
++  "ldr_raw": 100
++}
+\ No newline at end of file
+diff --git a/contrato/v1/exemplos/validos/ack__ack_executado.json b/contrato/v1/exemplos/validos/ack__ack_executado.json
+new file mode 100644
+index 0000000..a035b49
+--- /dev/null
++++ b/contrato/v1/exemplos/validos/ack__ack_executado.json
+@@ -0,0 +1,8 @@
++{
++  "v": 1,
++  "device": "atuador01",
++  "cmd_id": "c-20261103-000123",
++  "resultado": "executado",
++  "motivo": null,
++  "uptime_ms": 3100422
++}
+\ No newline at end of file
+diff --git a/contrato/v1/exemplos/validos/ack__ack_rejeitado_seguro.json b/contrato/v1/exemplos/validos/ack__ack_rejeitado_seguro.json
+new file mode 100644
+index 0000000..950a532
+--- /dev/null
++++ b/contrato/v1/exemplos/validos/ack__ack_rejeitado_seguro.json
+@@ -0,0 +1,8 @@
++{
++  "v": 1,
++  "device": "atuador01",
++  "cmd_id": "c-20261103-000127",
++  "resultado": "rejeitado",
++  "motivo": "modo_seguro",
++  "uptime_ms": 3160001
++}
+\ No newline at end of file
+diff --git a/contrato/v1/exemplos/validos/comando__comando_auto_aplicar.json b/contrato/v1/exemplos/validos/comando__comando_auto_aplicar.json
+new file mode 100644
+index 0000000..67193cf
+--- /dev/null
++++ b/contrato/v1/exemplos/validos/comando__comando_auto_aplicar.json
+@@ -0,0 +1,9 @@
++{
++  "v": 1,
++  "cmd_id": "c-20261103-000123",
++  "origem": "auto",
++  "acao": "aplicar",
++  "cena": "extrema",
++  "sombra": "fechada",
++  "ts": "2026-11-03T19:42:10Z"
++}
+\ No newline at end of file
+diff --git a/contrato/v1/exemplos/validos/comando__comando_manual_aplicar.json b/contrato/v1/exemplos/validos/comando__comando_manual_aplicar.json
+new file mode 100644
+index 0000000..aad6a5d
+--- /dev/null
++++ b/contrato/v1/exemplos/validos/comando__comando_manual_aplicar.json
+@@ -0,0 +1,9 @@
++{
++  "v": 1,
++  "cmd_id": "c-20261103-000125",
++  "origem": "manual",
++  "acao": "aplicar",
++  "cena": "ambiente",
++  "sombra": "aberta",
++  "ts": "2026-11-03T19:43:05Z"
++}
+\ No newline at end of file
+diff --git a/contrato/v1/exemplos/validos/comando__comando_manual_modo.json b/contrato/v1/exemplos/validos/comando__comando_manual_modo.json
+new file mode 100644
+index 0000000..1a2e6fd
+--- /dev/null
++++ b/contrato/v1/exemplos/validos/comando__comando_manual_modo.json
+@@ -0,0 +1,9 @@
++{
++  "v": 1,
++  "cmd_id": "c-20261103-000124",
++  "origem": "manual",
++  "acao": "definir_modo",
++  "modo": "manual",
++  "duracao_s": 300,
++  "ts": "2026-11-03T19:43:00Z"
++}
+\ No newline at end of file
+diff --git a/contrato/v1/exemplos/validos/comando__comando_voltar_auto.json b/contrato/v1/exemplos/validos/comando__comando_voltar_auto.json
+new file mode 100644
+index 0000000..5795dea
+--- /dev/null
++++ b/contrato/v1/exemplos/validos/comando__comando_voltar_auto.json
+@@ -0,0 +1,8 @@
++{
++  "v": 1,
++  "cmd_id": "c-20261103-000126",
++  "origem": "manual",
++  "acao": "definir_modo",
++  "modo": "auto",
++  "ts": "2026-11-03T19:45:00Z"
++}
+\ No newline at end of file
+diff --git a/contrato/v1/exemplos/validos/estado__estado_auto.json b/contrato/v1/exemplos/validos/estado__estado_auto.json
+new file mode 100644
+index 0000000..0cc8250
+--- /dev/null
++++ b/contrato/v1/exemplos/validos/estado__estado_auto.json
+@@ -0,0 +1,17 @@
++{
++  "v": 1,
++  "device": "atuador01",
++  "modo": "auto",
++  "cena": "extrema",
++  "leds": [
++    true,
++    true,
++    true,
++    true
++  ],
++  "sombra": "fechada",
++  "servo_graus": 90,
++  "manual_restante_s": null,
++  "ultimo_cmd_id": "c-20261103-000123",
++  "uptime_ms": 3100480
++}
+\ No newline at end of file
+diff --git a/contrato/v1/exemplos/validos/estado__estado_manual.json b/contrato/v1/exemplos/validos/estado__estado_manual.json
+new file mode 100644
+index 0000000..066e395
+--- /dev/null
++++ b/contrato/v1/exemplos/validos/estado__estado_manual.json
+@@ -0,0 +1,17 @@
++{
++  "v": 1,
++  "device": "atuador01",
++  "modo": "manual",
++  "cena": "ambiente",
++  "leds": [
++    true,
++    false,
++    false,
++    false
++  ],
++  "sombra": "aberta",
++  "servo_graus": 0,
++  "manual_restante_s": 295,
++  "ultimo_cmd_id": "c-20261103-000125",
++  "uptime_ms": 3165000
++}
+\ No newline at end of file
+diff --git a/contrato/v1/exemplos/validos/estado__estado_seguro_boot.json b/contrato/v1/exemplos/validos/estado__estado_seguro_boot.json
+new file mode 100644
+index 0000000..b385b44
+--- /dev/null
++++ b/contrato/v1/exemplos/validos/estado__estado_seguro_boot.json
+@@ -0,0 +1,17 @@
++{
++  "v": 1,
++  "device": "atuador01",
++  "modo": "seguro",
++  "cena": null,
++  "leds": [
++    false,
++    false,
++    false,
++    false
++  ],
++  "sombra": null,
++  "servo_graus": null,
++  "manual_restante_s": null,
++  "ultimo_cmd_id": null,
++  "uptime_ms": 1830
++}
+\ No newline at end of file
+diff --git a/contrato/v1/exemplos/validos/status__status_backend.json b/contrato/v1/exemplos/validos/status__status_backend.json
+new file mode 100644
+index 0000000..491b4ca
+--- /dev/null
++++ b/contrato/v1/exemplos/validos/status__status_backend.json
+@@ -0,0 +1,6 @@
++{
++  "v": 1,
++  "device": "backend",
++  "online": true,
++  "fw": "1.0.0"
++}
+\ No newline at end of file
+diff --git a/contrato/v1/exemplos/validos/status__status_sensor_lwt.json b/contrato/v1/exemplos/validos/status__status_sensor_lwt.json
+new file mode 100644
+index 0000000..258e28e
+--- /dev/null
++++ b/contrato/v1/exemplos/validos/status__status_sensor_lwt.json
+@@ -0,0 +1,5 @@
++{
++  "v": 1,
++  "device": "sensor01",
++  "online": false
++}
+\ No newline at end of file
+diff --git a/contrato/v1/exemplos/validos/status__status_sensor_online.json b/contrato/v1/exemplos/validos/status__status_sensor_online.json
+new file mode 100644
+index 0000000..a392288
+--- /dev/null
++++ b/contrato/v1/exemplos/validos/status__status_sensor_online.json
+@@ -0,0 +1,8 @@
++{
++  "v": 1,
++  "device": "sensor01",
++  "online": true,
++  "fw": "1.0.0",
++  "ip": "192.168.0.21",
++  "rssi": -61
++}
+\ No newline at end of file
+diff --git a/contrato/v1/exemplos/validos/telemetria__telemetria.json b/contrato/v1/exemplos/validos/telemetria__telemetria.json
+new file mode 100644
+index 0000000..c71dd2c
+--- /dev/null
++++ b/contrato/v1/exemplos/validos/telemetria__telemetria.json
+@@ -0,0 +1,9 @@
++{
++  "v": 1,
++  "device": "sensor01",
++  "seq": 1024,
++  "uptime_ms": 2048312,
++  "ldr_raw": 812,
++  "amostras": 16,
++  "rssi": -61
++}
+\ No newline at end of file
+diff --git a/contrato/v1/schemas/ack.schema.json b/contrato/v1/schemas/ack.schema.json
+new file mode 100644
+index 0000000..af7809e
+--- /dev/null
++++ b/contrato/v1/schemas/ack.schema.json
+@@ -0,0 +1,89 @@
++{
++  "$schema": "https://json-schema.org/draft/2020-12/schema",
++  "$id": "https://github.com/nnegherbon/IOT-ESP32-Sensor-de-luz/contrato/v1/ack.schema.json",
++  "title": "ack",
++  "description": "luzambiente/v1/atuador/<id>/ack — QoS 1, não retido, resposta a TODO comando recebido.",
++  "type": "object",
++  "properties": {
++    "v": {
++      "const": 1,
++      "description": "Versão do contrato. Mudança incompatível = novo prefixo luzambiente/v2."
++    },
++    "device": {
++      "type": "string",
++      "pattern": "^[a-z][a-z0-9-]{2,31}$",
++      "description": "Mesmo valor do {device_id} no tópico."
++    },
++    "cmd_id": {
++      "type": "string",
++      "pattern": "^c-[0-9]{8}-[0-9]{6}$",
++      "description": "Gerado pelo backend; chave de idempotência e de correlação comando↔ack."
++    },
++    "resultado": {
++      "enum": [
++        "executado",
++        "rejeitado"
++      ]
++    },
++    "motivo": {
++      "type": [
++        "string",
++        "null"
++      ],
++      "enum": [
++        null,
++        "payload_invalido",
++        "modo_seguro",
++        "modo_incompativel",
++        "intertravamento"
++      ]
++    },
++    "uptime_ms": {
++      "type": "integer",
++      "minimum": 0,
++      "description": "millis() do ESP32 (não há RTC; o backend carimba a hora de recebimento)."
++    }
++  },
++  "required": [
++    "v",
++    "device",
++    "cmd_id",
++    "resultado",
++    "motivo"
++  ],
++  "additionalProperties": true,
++  "allOf": [
++    {
++      "if": {
++        "properties": {
++          "resultado": {
++            "const": "executado"
++          }
++        }
++      },
++      "then": {
++        "properties": {
++          "motivo": {
++            "const": null
++          }
++        }
++      }
++    },
++    {
++      "if": {
++        "properties": {
++          "resultado": {
++            "const": "rejeitado"
++          }
++        }
++      },
++      "then": {
++        "properties": {
++          "motivo": {
++            "type": "string"
++          }
++        }
++      }
++    }
++  ]
++}
+\ No newline at end of file
+diff --git a/contrato/v1/schemas/comando.schema.json b/contrato/v1/schemas/comando.schema.json
+new file mode 100644
+index 0000000..ad63c23
+--- /dev/null
++++ b/contrato/v1/schemas/comando.schema.json
+@@ -0,0 +1,127 @@
++{
++  "$schema": "https://json-schema.org/draft/2020-12/schema",
++  "$id": "https://github.com/nnegherbon/IOT-ESP32-Sensor-de-luz/contrato/v1/comando.schema.json",
++  "title": "comando",
++  "description": "luzambiente/v1/atuador/<id>/comando — QoS 1, não retido, publicado SOMENTE pelo backend.",
++  "type": "object",
++  "properties": {
++    "v": {
++      "const": 1,
++      "description": "Versão do contrato. Mudança incompatível = novo prefixo luzambiente/v2."
++    },
++    "cmd_id": {
++      "type": "string",
++      "pattern": "^c-[0-9]{8}-[0-9]{6}$",
++      "description": "Gerado pelo backend; chave de idempotência e de correlação comando↔ack."
++    },
++    "origem": {
++      "enum": [
++        "auto",
++        "manual"
++      ]
++    },
++    "acao": {
++      "enum": [
++        "aplicar",
++        "definir_modo"
++      ]
++    },
++    "cena": {
++      "enum": [
++        "escuro",
++        "ambiente",
++        "alta",
++        "extrema"
++      ]
++    },
++    "sombra": {
++      "enum": [
++        "aberta",
++        "fechada"
++      ]
++    },
++    "modo": {
++      "enum": [
++        "auto",
++        "manual"
++      ]
++    },
++    "duracao_s": {
++      "type": "integer",
++      "minimum": 60,
++      "maximum": 1800,
++      "description": "Timeout do modo manual (padrão 300 s)."
++    },
++    "ts": {
++      "type": "string",
++      "format": "date-time",
++      "description": "Hora UTC do backend (informativo)."
++    }
++  },
++  "required": [
++    "v",
++    "cmd_id",
++    "origem",
++    "acao"
++  ],
++  "additionalProperties": true,
++  "allOf": [
++    {
++      "if": {
++        "properties": {
++          "acao": {
++            "const": "aplicar"
++          }
++        }
++      },
++      "then": {
++        "required": [
++          "cena",
++          "sombra"
++        ]
++      }
++    },
++    {
++      "if": {
++        "properties": {
++          "acao": {
++            "const": "definir_modo"
++          }
++        }
++      },
++      "then": {
++        "required": [
++          "modo"
++        ],
++        "if": {
++          "properties": {
++            "modo": {
++              "const": "manual"
++            }
++          }
++        },
++        "then": {
++          "required": [
++            "duracao_s"
++          ]
++        }
++      }
++    },
++    {
++      "if": {
++        "properties": {
++          "acao": {
++            "const": "definir_modo"
++          }
++        }
++      },
++      "then": {
++        "properties": {
++          "origem": {
++            "const": "manual"
++          }
++        }
++      }
++    }
++  ]
++}
+\ No newline at end of file
+diff --git a/contrato/v1/schemas/estado.schema.json b/contrato/v1/schemas/estado.schema.json
+new file mode 100644
+index 0000000..2758ebb
+--- /dev/null
++++ b/contrato/v1/schemas/estado.schema.json
+@@ -0,0 +1,109 @@
++{
++  "$schema": "https://json-schema.org/draft/2020-12/schema",
++  "$id": "https://github.com/nnegherbon/IOT-ESP32-Sensor-de-luz/contrato/v1/estado.schema.json",
++  "title": "estado",
++  "description": "luzambiente/v1/atuador/<id>/estado — retido, QoS 1, a cada mudança e a cada 30 s (heartbeat).",
++  "type": "object",
++  "properties": {
++    "v": {
++      "const": 1,
++      "description": "Versão do contrato. Mudança incompatível = novo prefixo luzambiente/v2."
++    },
++    "device": {
++      "type": "string",
++      "pattern": "^[a-z][a-z0-9-]{2,31}$",
++      "description": "Mesmo valor do {device_id} no tópico."
++    },
++    "modo": {
++      "enum": [
++        "auto",
++        "manual",
++        "seguro"
++      ]
++    },
++    "cena": {
++      "oneOf": [
++        {
++          "enum": [
++            "escuro",
++            "ambiente",
++            "alta",
++            "extrema"
++          ]
++        },
++        {
++          "type": "null"
++        }
++      ]
++    },
++    "leds": {
++      "type": "array",
++      "items": {
++        "type": "boolean"
++      },
++      "minItems": 4,
++      "maxItems": 4,
++      "description": "[LED1 GPIO27, LED2 GPIO26, LED3 GPIO25, LED4 GPIO33] — estado escrito nos pinos."
++    },
++    "sombra": {
++      "oneOf": [
++        {
++          "enum": [
++            "aberta",
++            "fechada"
++          ]
++        },
++        {
++          "type": "null"
++        }
++      ],
++      "description": "null = posição desconhecida (após o boot, antes do primeiro comando; o servo fica sem PWM)."
++    },
++    "servo_graus": {
++      "type": [
++        "integer",
++        "null"
++      ],
++      "minimum": 0,
++      "maximum": 90,
++      "description": "Último ângulo comandado ao servo: 0° = aberta, 90° = fechada. null = desconhecido."
++    },
++    "manual_restante_s": {
++      "type": [
++        "integer",
++        "null"
++      ],
++      "minimum": 0
++    },
++    "ultimo_cmd_id": {
++      "oneOf": [
++        {
++          "type": "string",
++          "pattern": "^c-[0-9]{8}-[0-9]{6}$",
++          "description": "Gerado pelo backend; chave de idempotência e de correlação comando↔ack."
++        },
++        {
++          "type": "null"
++        }
++      ]
++    },
++    "uptime_ms": {
++      "type": "integer",
++      "minimum": 0,
++      "description": "millis() do ESP32 (não há RTC; o backend carimba a hora de recebimento)."
++    }
++  },
++  "required": [
++    "v",
++    "device",
++    "modo",
++    "cena",
++    "leds",
++    "sombra",
++    "servo_graus",
++    "manual_restante_s",
++    "ultimo_cmd_id",
++    "uptime_ms"
++  ],
++  "additionalProperties": true
++}
+\ No newline at end of file
+diff --git a/contrato/v1/schemas/status.schema.json b/contrato/v1/schemas/status.schema.json
+new file mode 100644
+index 0000000..deaf677
+--- /dev/null
++++ b/contrato/v1/schemas/status.schema.json
+@@ -0,0 +1,38 @@
++{
++  "$schema": "https://json-schema.org/draft/2020-12/schema",
++  "$id": "https://github.com/nnegherbon/IOT-ESP32-Sensor-de-luz/contrato/v1/status.schema.json",
++  "title": "status",
++  "description": "luzambiente/v1/{backend|sensor/<id>|atuador/<id>}/status — retido, QoS 1, também usado como LWT (online=false).",
++  "type": "object",
++  "properties": {
++    "v": {
++      "const": 1,
++      "description": "Versão do contrato. Mudança incompatível = novo prefixo luzambiente/v2."
++    },
++    "device": {
++      "type": "string",
++      "pattern": "^([a-z][a-z0-9-]{2,31})$"
++    },
++    "online": {
++      "type": "boolean"
++    },
++    "fw": {
++      "type": "string",
++      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
++    },
++    "ip": {
++      "type": "string"
++    },
++    "rssi": {
++      "type": "integer",
++      "minimum": -120,
++      "maximum": 0
++    }
++  },
++  "required": [
++    "v",
++    "device",
++    "online"
++  ],
++  "additionalProperties": true
++}
+\ No newline at end of file
+diff --git a/contrato/v1/schemas/telemetria.schema.json b/contrato/v1/schemas/telemetria.schema.json
+new file mode 100644
+index 0000000..69b74f8
+--- /dev/null
++++ b/contrato/v1/schemas/telemetria.schema.json
+@@ -0,0 +1,52 @@
++{
++  "$schema": "https://json-schema.org/draft/2020-12/schema",
++  "$id": "https://github.com/nnegherbon/IOT-ESP32-Sensor-de-luz/contrato/v1/telemetria.schema.json",
++  "title": "telemetria",
++  "description": "luzambiente/v1/sensor/<id>/telemetria — QoS 0, não retido, a cada 2 s.",
++  "type": "object",
++  "properties": {
++    "v": {
++      "const": 1,
++      "description": "Versão do contrato. Mudança incompatível = novo prefixo luzambiente/v2."
++    },
++    "device": {
++      "type": "string",
++      "pattern": "^[a-z][a-z0-9-]{2,31}$",
++      "description": "Mesmo valor do {device_id} no tópico."
++    },
++    "seq": {
++      "type": "integer",
++      "minimum": 0,
++      "description": "Contador; reinicia em 0 no boot. Lacunas = mensagens perdidas."
++    },
++    "uptime_ms": {
++      "type": "integer",
++      "minimum": 0,
++      "description": "millis() do ESP32 (não há RTC; o backend carimba a hora de recebimento)."
++    },
++    "ldr_raw": {
++      "type": "integer",
++      "minimum": 0,
++      "maximum": 4095,
++      "description": "Média de 'amostras' leituras de analogRead(GPIO34), ADC 12 bits, valor bruto (sem lux)."
++    },
++    "amostras": {
++      "type": "integer",
++      "minimum": 1,
++      "maximum": 64
++    },
++    "rssi": {
++      "type": "integer",
++      "minimum": -120,
++      "maximum": 0
++    }
++  },
++  "required": [
++    "v",
++    "device",
++    "seq",
++    "uptime_ms",
++    "ldr_raw"
++  ],
++  "additionalProperties": true
++}
+\ No newline at end of file
+diff --git a/contrato/v1/validar.py b/contrato/v1/validar.py
+new file mode 100644
+index 0000000..0dca969
+--- /dev/null
++++ b/contrato/v1/validar.py
+@@ -0,0 +1,65 @@
++"""Valida os exemplos do contrato v1 contra os JSON Schemas.
++
++    pip install jsonschema
++    python contrato/v1/validar.py
++
++Os exemplos em exemplos/validos devem passar e os de exemplos/invalidos devem
++falhar. Além do schema, confere duas regras semânticas do contrato que o JSON
++Schema não expressa bem:
++  - leds coerentes com a cena (mesma lógica de onMessage() da N1);
++  - servo_graus coerente com sombra (aberta = 0°, fechada = 90°).
++"""
++import json
++import sys
++from pathlib import Path
++
++from jsonschema import Draft202012Validator, FormatChecker
++
++BASE = Path(__file__).resolve().parent
++LEDS_POR_CENA = {
++    "escuro": [False, True, False, False],   # LED 2 (GPIO26)
++    "ambiente": [True, False, False, False],  # LED 1 (GPIO27)
++    "alta": [False, False, True, False],      # LED 3 (GPIO25)
++    "extrema": [True, True, True, True],      # os 4 LEDs (comportamento herdado da N1)
++}
++SERVO_POR_SOMBRA = {"aberta": 0, "fechada": 90}
++
++
++def schemas():
++    return {p.name.split(".")[0]: Draft202012Validator(json.loads(p.read_text()), format_checker=FormatChecker())
++            for p in (BASE / "schemas").glob("*.schema.json")}
++
++
++def erros(tipo, obj, vals):
++    out = [e.message for e in vals[tipo].iter_errors(obj)]
++    if tipo == "estado" and not out:
++        if obj["modo"] == "seguro":
++            if any(obj["leds"]):
++                out.append("em modo seguro os LEDs de cena ficam apagados (LED 1 pisca, mas o estado publicado é false)")
++        elif obj["cena"] is not None and obj["leds"] != LEDS_POR_CENA[obj["cena"]]:
++            out.append(f"leds {obj['leds']} incoerentes com a cena {obj['cena']}")
++        if (obj["sombra"] is None) != (obj["servo_graus"] is None):
++            out.append("sombra e servo_graus devem ser ambos null (posição desconhecida) ou ambos definidos")
++        elif obj["sombra"] is not None and obj["servo_graus"] != SERVO_POR_SOMBRA[obj["sombra"]]:
++            out.append(f"servo_graus {obj['servo_graus']} incoerente com sombra {obj['sombra']}")
++    return out
++
++
++def main() -> int:
++    vals = schemas()
++    falhas = 0
++    for grupo, deve_passar in (("validos", True), ("invalidos", False)):
++        for arq in sorted((BASE / "exemplos" / grupo).glob("*.json")):
++            tipo = arq.name.split("__")[0]
++            e = erros(tipo, json.loads(arq.read_text()), vals)
++            ok = (not e) == deve_passar
++            falhas += not ok
++            status = "OK  " if ok else "FALHA"
++            detalhe = "" if deve_passar else f"  -> rejeitado: {e[0] if e else 'NÃO rejeitado'}"
++            print(f"{status} {grupo:9} {arq.name}{detalhe}")
++    print(f"\n{'todos os exemplos conferem com o contrato v1' if not falhas else f'{falhas} divergência(s)'}")
++    return 1 if falhas else 0
++
++
++if __name__ == "__main__":
++    sys.exit(main())
+diff --git a/Atuador_LED/Atuador_LED.ino b/firmware/n1/Atuador_LED/Atuador_LED.ino
+similarity index 95%
+rename from Atuador_LED/Atuador_LED.ino
+rename to firmware/n1/Atuador_LED/Atuador_LED.ino
+index 5e56457..aed92e7 100644
+--- a/Atuador_LED/Atuador_LED.ino
++++ b/firmware/n1/Atuador_LED/Atuador_LED.ino
+@@ -4,8 +4,8 @@
+ #include <PubSubClient.h>
+ #include <WiFi.h>
+ 
+-#define WIFI_SSID "IPhone vinícius Clemente"
+-#define WIFI_PASSWORD "123456780301"
++#define WIFI_SSID "SUA_REDE"      // credencial removida do repositório (R9)
++#define WIFI_PASSWORD "SUA_SENHA"  // credencial removida do repositório (R9)
+ #define MQTT_HOST "broker.hivemq.com"
+ #define MQTT_PORT 1883
+ 
+diff --git a/Sensor_de_luz/Sensor_de_luz.ino b/firmware/n1/Sensor_de_luz/Sensor_de_luz.ino
+similarity index 91%
+rename from Sensor_de_luz/Sensor_de_luz.ino
+rename to firmware/n1/Sensor_de_luz/Sensor_de_luz.ino
+index 1ab934b..216604b 100644
+--- a/Sensor_de_luz/Sensor_de_luz.ino
++++ b/firmware/n1/Sensor_de_luz/Sensor_de_luz.ino
+@@ -3,8 +3,8 @@
+ #include <WiFi.h>
+ #include <PubSubClient.h>
+ 
+-#define WIFI_SSID "IPhone vinícius Clemente"
+-#define WIFI_PASSWORD "123456780301"
++#define WIFI_SSID "SUA_REDE"      // credencial removida do repositório (R9)
++#define WIFI_PASSWORD "SUA_SENHA"  // credencial removida do repositório (R9)
+ #define MQTT_HOST "broker.hivemq.com"
+ #define MQTT_PORT 1883
+ 

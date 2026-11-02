@@ -1,0 +1,8 @@
+{
+  "v": 1,
+  "device": "atuador01",
+  "cmd_id": "c-20261103-000123",
+  "resultado": "executado",
+  "motivo": null,
+  "uptime_ms": 3100422
+}

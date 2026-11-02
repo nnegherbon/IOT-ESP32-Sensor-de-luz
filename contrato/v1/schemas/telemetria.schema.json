@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/nnegherbon/IOT-ESP32-Sensor-de-luz/contrato/v1/telemetria.schema.json",
+  "title": "telemetria",
+  "description": "luzambiente/v1/sensor/<id>/telemetria — QoS 0, não retido, a cada 2 s.",
+  "type": "object",
+  "properties": {
+    "v": {
+      "const": 1,
+      "description": "Versão do contrato. Mudança incompatível = novo prefixo luzambiente/v2."
+    },
+    "device": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]{2,31}$",
+      "description": "Mesmo valor do {device_id} no tópico."
+    },
+    "seq": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Contador; reinicia em 0 no boot. Lacunas = mensagens perdidas."
+    },
+    "uptime_ms": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "millis() do ESP32 (não há RTC; o backend carimba a hora de recebimento)."
+    },
+    "ldr_raw": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 4095,
+      "description": "Média de 'amostras' leituras de analogRead(GPIO34), ADC 12 bits, valor bruto (sem lux)."
+    },
+    "amostras": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 64
+    },
+    "rssi": {
+      "type": "integer",
+      "minimum": -120,
+      "maximum": 0
+    }
+  },
+  "required": [
+    "v",
+    "device",
+    "seq",
+    "uptime_ms",
+    "ldr_raw"
+  ],
+  "additionalProperties": true
+}

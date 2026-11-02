@@ -1,0 +1,9 @@
+{
+  "v": 1,
+  "device": "sensor01",
+  "seq": 1024,
+  "uptime_ms": 2048312,
+  "ldr_raw": 812,
+  "amostras": 16,
+  "rssi": -61
+}

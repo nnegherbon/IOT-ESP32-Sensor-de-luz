@@ -1,0 +1,17 @@
+{
+  "v": 1,
+  "device": "atuador01",
+  "modo": "auto",
+  "cena": "extrema",
+  "leds": [
+    true,
+    true,
+    true,
+    true
+  ],
+  "sombra": "fechada",
+  "servo_graus": 90,
+  "manual_restante_s": null,
+  "ultimo_cmd_id": "c-20261103-000123",
+  "uptime_ms": 3100480
+}

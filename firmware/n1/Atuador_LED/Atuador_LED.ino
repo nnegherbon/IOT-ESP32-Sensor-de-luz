@@ -4,8 +4,8 @@
 #include <PubSubClient.h>
 #include <WiFi.h>
 
-#define WIFI_SSID "IPhone vinícius Clemente"
-#define WIFI_PASSWORD "123456780301"
+#define WIFI_SSID "SUA_REDE"      // credencial removida do repositório (R9)
+#define WIFI_PASSWORD "SUA_SENHA"  // credencial removida do repositório (R9)
 #define MQTT_HOST "broker.hivemq.com"
 #define MQTT_PORT 1883
 

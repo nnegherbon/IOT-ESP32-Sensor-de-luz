@@ -1,0 +1,10 @@
+# segredos — nunca versionar (R9)
+secrets.h
+.env
+# artefatos
+__pycache__/
+.pytest_cache/
+node_modules/
+dist/
+docs/_cp12_tmp.html
+*.log

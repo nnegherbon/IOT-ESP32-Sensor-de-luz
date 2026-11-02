@@ -1,0 +1,8 @@
+{
+  "v": 1,
+  "device": "atuador01",
+  "cmd_id": "c-20261103-000127",
+  "resultado": "rejeitado",
+  "motivo": "modo_seguro",
+  "uptime_ms": 3160001
+}
