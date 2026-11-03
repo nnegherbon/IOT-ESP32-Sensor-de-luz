@@ -1,0 +1,31 @@
+sequenceDiagram
+  autonumber
+  actor OP as Operador
+  participant UI as Interface
+  participant BE as Backend
+  participant DB as PostgreSQL
+  participant MQ as Mosquitto
+  participant FA as Firmware atuador
+  participant AT as LEDs + servo
+  OP->>UI: "Modo manual 5 min" e depois "Fechar sombra"
+  UI->>BE: POST /comandos (token de perfil operador)
+  BE->>BE: valida perfil e regras (ex.: rejeita se atuador em SEGURO)
+  BE->>DB: INSERT comando cmd_id, status = enviado
+  BE->>MQ: PUBLISH v1/atuador/atuador01/comando (QoS 1)
+  MQ->>FA: entrega
+  FA->>FA: valida v1 · confere modo · intertravamento (servo ≥ 5 s, 0–90°)
+  alt aceito
+    FA->>AT: escreve LEDs / move servo
+    FA->>MQ: ack resultado=executado
+    FA->>MQ: estado (retido) modo, cena, leds, sombra
+  else rejeitado
+    FA->>MQ: ack resultado=rejeitado, motivo
+  end
+  MQ->>BE: ack + estado
+  BE->>DB: UPDATE comando (executado/rejeitado, latência)
+  BE-->>UI: WebSocket: confirmação e novo estado
+  UI-->>OP: "Confirmado em 120 ms" ou motivo da rejeição
+  opt sem ack em 3 s
+    BE->>MQ: retransmite 1× o mesmo cmd_id (idempotente)
+    BE->>DB: após nova espera: status = sem_confirmacao → alerta
+  end
