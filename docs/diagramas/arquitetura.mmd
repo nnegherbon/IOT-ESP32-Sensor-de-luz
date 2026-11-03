@@ -1,0 +1,23 @@
+flowchart TB
+  subgraph S["Nó Sensor · ESP32 DevKit #1"]
+    LDR["LDR + divisor 10 kΩ<br/>GPIO34 (ADC1)"] --> FS["Firmware sensor v1<br/>média de 16 amostras<br/>telemetria a cada 2 s"]
+  end
+  subgraph B["Servidor · Docker Compose"]
+    MQ[("Mosquitto 2<br/>usuário/senha + ACL<br/>TLS 8883")]
+    BE["Backend<br/>FastAPI + aiomqtt<br/>motor de decisão · alertas"]
+    DB[("PostgreSQL 16<br/>histórico")]
+    UI["Interface web<br/>React + TS (nginx)"]
+    MQ <-->|"assina v1/# · publica comando"| BE
+    BE <-->|SQL| DB
+    UI <-->|"REST + WebSocket<br/>login com perfis"| BE
+  end
+  subgraph A["Nó Atuador · ESP32 DevKit #2"]
+    FA["Firmware atuador v1<br/>AUTO · MANUAL · SEGURO"] --> LED["4 LEDs + 220 Ω<br/>GPIO27/26/25/33"]
+    FA --> SV["Servo SG90<br/>sinal GPIO18<br/>fonte 5 V externa"]
+  end
+  FS -->|"telemetria · status/LWT"| MQ
+  MQ -->|comando| FA
+  FA -->|"ack · estado · status/LWT"| MQ
+  BE -.->|"alerta"| N["Notificação externa<br/>Telegram"]
+  U(("Usuário<br/>celular/PC")) --> UI
+  N -.-> U
