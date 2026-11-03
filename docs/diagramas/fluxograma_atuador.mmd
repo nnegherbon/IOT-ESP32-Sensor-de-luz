@@ -1,0 +1,29 @@
+flowchart TD
+  START(["energização / reset"]) --> BOOT
+  BOOT["<b>BOOT</b><br/>1º passo do setup():<br/>GPIO25/26/27/33 OUTPUT LOW<br/>servo SEM PWM (pull-down 10 kΩ)"]
+  BOOT -->|"pinos em estado seguro"| CON
+  CON["<b>CONECTANDO</b><br/>Wi-Fi → MQTT atuador01<br/>LWT: status online=false<br/>backoff 1 s → 30 s, sem travar o loop"]
+  CON -->|"conectado: publica status online,<br/>assina comando · backend/status · sensor/+/status"| SEG
+  SEG["<b>SEGURO</b><br/>LEDs de cena apagados · LED 1 pisca 1 Hz<br/>servo sem PWM: cobertura fica onde está<br/>todo comando → ack rejeitado (modo_seguro)"]
+  SEG -->|"backend online E sensor online<br/>E MQTT conectado"| AUTO
+  AUTO["<b>AUTO</b><br/>executa comandos origem=auto<br/>manual+aplicar → rejeitado (modo_incompativel)"]
+  AUTO -->|"comando definir_modo manual<br/>duracao_s 60–1800 (padrão 300 s)"| MAN
+  MAN["<b>MANUAL</b><br/>executa comandos origem=manual<br/>origem=auto → rejeitado (modo_incompativel)<br/>publica manual_restante_s"]
+  MAN -->|"TIMEOUT duracao_s esgotado<br/>OU definir_modo auto"| AUTO
+  AUTO -->|"FALHA"| SEG
+  MAN -->|"FALHA"| SEG
+  CON -.->|"MQTT perdido"| CON
+
+  subgraph LEG[" "]
+    direction LR
+    F["<b>FALHA</b> = MQTT desconectado &gt; 30 s<br/>OU LWT backend online=false<br/>OU LWT sensor online=false<br/>De SEGURO só se volta para AUTO, nunca direto para MANUAL."]
+    I["<b>INTERTRAVAMENTO</b> (antes de mover o servo, em AUTO e MANUAL)<br/>• modo ≠ SEGURO<br/>• ≥ 5 s desde o último movimento, senão ack rejeitado (intertravamento)<br/>• ângulo limitado a 0–90° (aberta 0° · fechada 90°)<br/>• cmd_id repetido → reenvia o ack original, não executa"]
+  end
+  MAN ~~~ LEG
+  classDef st fill:#e8f0fb,stroke:#2a78d6,color:#0b0b0b
+  classDef safe fill:#fdeceb,stroke:#d03b3b,color:#0b0b0b
+  classDef note fill:#fff7e0,stroke:#c98500,color:#0b0b0b,text-align:left
+  class BOOT,CON,AUTO,MAN st
+  class SEG safe
+  class F,I note
+  style LEG fill:none,stroke:none
