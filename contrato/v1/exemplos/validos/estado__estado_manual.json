@@ -1,0 +1,17 @@
+{
+  "v": 1,
+  "device": "atuador01",
+  "modo": "manual",
+  "cena": "ambiente",
+  "leds": [
+    true,
+    false,
+    false,
+    false
+  ],
+  "sombra": "aberta",
+  "servo_graus": 0,
+  "manual_restante_s": 295,
+  "ultimo_cmd_id": "c-20261103-000125",
+  "uptime_ms": 3165000
+}

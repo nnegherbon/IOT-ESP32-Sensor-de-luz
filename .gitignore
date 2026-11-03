@@ -1,6 +1,19 @@
+<<<<<<< HEAD
 .env
 __pycache__/
 *.py[cod]
 .pytest_cache/
 .pio/
 firmware/**/include/secrets.h
+=======
+# segredos — nunca versionar (R9)
+secrets.h
+.env
+# artefatos
+__pycache__/
+.pytest_cache/
+node_modules/
+dist/
+docs/_cp12_tmp.html
+*.log
+>>>>>>> cd9e4a04872cff4bc176a175ffbc72a3ee183ee3

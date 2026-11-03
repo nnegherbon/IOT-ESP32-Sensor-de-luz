@@ -1,0 +1,41 @@
+# Sobe PostgreSQL + backend (assinante MQTT/API/WebSocket) + frontend (nginx).
+# Uso: cp .env.example .env && docker compose up -d --build  → http://localhost:8080
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-luz}
+      POSTGRES_USER: ${POSTGRES_USER:-luz}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD no .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data      # persistência entre reinícios
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    # descomente para acessar o banco do host (psql, backup externo)
+    # ports: ["127.0.0.1:5432:5432"]
+
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-luz}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-luz}
+
+  frontend:
+    build: ./frontend
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "${HTTP_PORT:-8080}:80"
+
+volumes:
+  pgdata:

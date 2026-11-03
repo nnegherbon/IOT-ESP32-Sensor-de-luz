@@ -1,0 +1,109 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/nnegherbon/IOT-ESP32-Sensor-de-luz/contrato/v1/estado.schema.json",
+  "title": "estado",
+  "description": "luzambiente/v1/atuador/<id>/estado — retido, QoS 1, a cada mudança e a cada 30 s (heartbeat).",
+  "type": "object",
+  "properties": {
+    "v": {
+      "const": 1,
+      "description": "Versão do contrato. Mudança incompatível = novo prefixo luzambiente/v2."
+    },
+    "device": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]{2,31}$",
+      "description": "Mesmo valor do {device_id} no tópico."
+    },
+    "modo": {
+      "enum": [
+        "auto",
+        "manual",
+        "seguro"
+      ]
+    },
+    "cena": {
+      "oneOf": [
+        {
+          "enum": [
+            "escuro",
+            "ambiente",
+            "alta",
+            "extrema"
+          ]
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "leds": {
+      "type": "array",
+      "items": {
+        "type": "boolean"
+      },
+      "minItems": 4,
+      "maxItems": 4,
+      "description": "[LED1 GPIO27, LED2 GPIO26, LED3 GPIO25, LED4 GPIO33] — estado escrito nos pinos."
+    },
+    "sombra": {
+      "oneOf": [
+        {
+          "enum": [
+            "aberta",
+            "fechada"
+          ]
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "null = posição desconhecida (após o boot, antes do primeiro comando; o servo fica sem PWM)."
+    },
+    "servo_graus": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 90,
+      "description": "Último ângulo comandado ao servo: 0° = aberta, 90° = fechada. null = desconhecido."
+    },
+    "manual_restante_s": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "ultimo_cmd_id": {
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^c-[0-9]{8}-[0-9]{6}$",
+          "description": "Gerado pelo backend; chave de idempotência e de correlação comando↔ack."
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "uptime_ms": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "millis() do ESP32 (não há RTC; o backend carimba a hora de recebimento)."
+    }
+  },
+  "required": [
+    "v",
+    "device",
+    "modo",
+    "cena",
+    "leds",
+    "sombra",
+    "servo_graus",
+    "manual_restante_s",
+    "ultimo_cmd_id",
+    "uptime_ms"
+  ],
+  "additionalProperties": true
+}

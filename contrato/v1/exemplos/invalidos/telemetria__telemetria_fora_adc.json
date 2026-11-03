@@ -1,0 +1,7 @@
+{
+  "v": 1,
+  "device": "sensor01",
+  "seq": 1,
+  "uptime_ms": 10,
+  "ldr_raw": 5000
+}

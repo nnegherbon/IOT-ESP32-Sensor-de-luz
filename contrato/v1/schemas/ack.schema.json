@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/nnegherbon/IOT-ESP32-Sensor-de-luz/contrato/v1/ack.schema.json",
+  "title": "ack",
+  "description": "luzambiente/v1/atuador/<id>/ack — QoS 1, não retido, resposta a TODO comando recebido.",
+  "type": "object",
+  "properties": {
+    "v": {
+      "const": 1,
+      "description": "Versão do contrato. Mudança incompatível = novo prefixo luzambiente/v2."
+    },
+    "device": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]{2,31}$",
+      "description": "Mesmo valor do {device_id} no tópico."
+    },
+    "cmd_id": {
+      "type": "string",
+      "pattern": "^c-[0-9]{8}-[0-9]{6}$",
+      "description": "Gerado pelo backend; chave de idempotência e de correlação comando↔ack."
+    },
+    "resultado": {
+      "enum": [
+        "executado",
+        "rejeitado"
+      ]
+    },
+    "motivo": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        null,
+        "payload_invalido",
+        "modo_seguro",
+        "modo_incompativel",
+        "intertravamento"
+      ]
+    },
+    "uptime_ms": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "millis() do ESP32 (não há RTC; o backend carimba a hora de recebimento)."
+    }
+  },
+  "required": [
+    "v",
+    "device",
+    "cmd_id",
+    "resultado",
+    "motivo"
+  ],
+  "additionalProperties": true,
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "resultado": {
+            "const": "executado"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "motivo": {
+            "const": null
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "resultado": {
+            "const": "rejeitado"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "motivo": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  ]
+}

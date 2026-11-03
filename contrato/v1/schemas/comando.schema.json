@@ -1,0 +1,127 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/nnegherbon/IOT-ESP32-Sensor-de-luz/contrato/v1/comando.schema.json",
+  "title": "comando",
+  "description": "luzambiente/v1/atuador/<id>/comando — QoS 1, não retido, publicado SOMENTE pelo backend.",
+  "type": "object",
+  "properties": {
+    "v": {
+      "const": 1,
+      "description": "Versão do contrato. Mudança incompatível = novo prefixo luzambiente/v2."
+    },
+    "cmd_id": {
+      "type": "string",
+      "pattern": "^c-[0-9]{8}-[0-9]{6}$",
+      "description": "Gerado pelo backend; chave de idempotência e de correlação comando↔ack."
+    },
+    "origem": {
+      "enum": [
+        "auto",
+        "manual"
+      ]
+    },
+    "acao": {
+      "enum": [
+        "aplicar",
+        "definir_modo"
+      ]
+    },
+    "cena": {
+      "enum": [
+        "escuro",
+        "ambiente",
+        "alta",
+        "extrema"
+      ]
+    },
+    "sombra": {
+      "enum": [
+        "aberta",
+        "fechada"
+      ]
+    },
+    "modo": {
+      "enum": [
+        "auto",
+        "manual"
+      ]
+    },
+    "duracao_s": {
+      "type": "integer",
+      "minimum": 60,
+      "maximum": 1800,
+      "description": "Timeout do modo manual (padrão 300 s)."
+    },
+    "ts": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Hora UTC do backend (informativo)."
+    }
+  },
+  "required": [
+    "v",
+    "cmd_id",
+    "origem",
+    "acao"
+  ],
+  "additionalProperties": true,
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "acao": {
+            "const": "aplicar"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "cena",
+          "sombra"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "acao": {
+            "const": "definir_modo"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "modo"
+        ],
+        "if": {
+          "properties": {
+            "modo": {
+              "const": "manual"
+            }
+          }
+        },
+        "then": {
+          "required": [
+            "duracao_s"
+          ]
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "acao": {
+            "const": "definir_modo"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "origem": {
+            "const": "manual"
+          }
+        }
+      }
+    }
+  ]
+}
