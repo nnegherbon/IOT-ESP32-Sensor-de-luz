@@ -18,14 +18,19 @@ constexpr uint8_t PIN_LED_EXTREMA  = 33; // LED 4
 // Servo da sombra (N3). Alimentado pelo USB (VIN), sem fonte externa:
 // o movimento é suave (em passos) e o PWM é DESLIGADO logo após cada movimento.
 // Nunca deixe o servo segurando posição continuamente: travado, ele aquece e queima
-// (foi o que queimou o SG90 em 2026-11-22). Recalibre os ângulos ao trocar o servo,
-// mantendo folga das pontas (0° e 180°) para não forçar o batente interno.
+// (foi o que queimou o SG90 em 2026-11-22, parado em 0° = pulso de 500 µs, a ponta extrema).
 constexpr uint8_t PIN_SERVO        = 18;
-// Ângulos da montagem atual (servo deitado na borda da caixa, braço reencaixado 1 dente ≈ 17°):
-constexpr int SOMBRA_ABERTA_GRAUS  = 0;   // posição padrão: braço na vertical (planta recebe luz)
-constexpr int SOMBRA_FECHADA_GRAUS = 105; // braço na horizontal sobre a planta (90° + 1 dente)
+// Limites de segurança: nenhum ângulo fora desta faixa chega ao servo (folga dos batentes internos).
+constexpr int SERVO_MIN_GRAUS      = 15;
+constexpr int SERVO_MAX_GRAUS      = 165;
+// Ângulos da sombra. Calibre com firmware/testes/Teste_Servo antes de gravar este sketch:
+// encaixe o braço para que ABERTA fique na vertical e FECHADA na horizontal sobre a planta.
+constexpr int SOMBRA_ABERTA_GRAUS  = 15;  // posição padrão: braço na vertical (planta recebe luz)
+constexpr int SOMBRA_FECHADA_GRAUS = 120; // braço na horizontal sobre a planta
 constexpr int PASSO_GRAUS          = 2;   // graus por passo do movimento suave
 constexpr int PAUSA_PASSO_MS       = 30;  // pausa entre passos
+constexpr int ESPERA_FINAL_MS      = 400; // tempo para o servo terminar o último passo antes de soltar
+constexpr int ESPERA_BOOT_MS       = 1000; // no boot a posição real é desconhecida: dá tempo de percorrer tudo
 constexpr bool FECHAR_EM_ALTA      = false; // true = fecha também na cena "alta"; false = só na "extrema"
 
 #define BASE "iot/luzambiente"
@@ -53,10 +58,29 @@ void desligarTodos() {
   digitalWrite(PIN_LED_EXTREMA, LOW);
 }
 
-// Converte graus (0–180) no duty de 16 bits a 50 Hz (pulso de 500 a 2400 µs)
+// Converte graus (0–180) no duty de 16 bits a 50 Hz (pulso de 500 a 2400 µs),
+// sempre limitado à faixa segura SERVO_MIN_GRAUS..SERVO_MAX_GRAUS
 void escreverServo(int graus) {
+  graus = constrain(graus, SERVO_MIN_GRAUS, SERVO_MAX_GRAUS);
   uint32_t us = map(graus, 0, 180, 500, 2400);
   ledcWrite(PIN_SERVO, us * 65535 / 20000);
+}
+
+// Liga o PWM do servo. Retorna false se o LEDC falhar (aí o servo não é movido).
+bool ligarServo() {
+  if (!ledcAttach(PIN_SERVO, 50, 16)) {
+    Serial.println("ERRO: nao foi possivel ligar o PWM do servo");
+    return false;
+  }
+  return true;
+}
+
+// Solta o motor: sem pulsos o servo não faz força. O pino fica em LOW (e não flutuando),
+// para que ruído no fio não seja lido como pulso e faça o servo tremer.
+void soltarServo() {
+  ledcDetach(PIN_SERVO);
+  pinMode(PIN_SERVO, OUTPUT);
+  digitalWrite(PIN_SERVO, LOW);
 }
 
 void publicarSombra() {
@@ -68,16 +92,17 @@ void publicarSombra() {
 
 // Move o servo devagar até o ângulo alvo e depois solta o motor (sem forçar em repouso)
 void moverSombra(int alvo) {
+  alvo = constrain(alvo, SERVO_MIN_GRAUS, SERVO_MAX_GRAUS);
   if (alvo == posicaoServo) return;
-  ledcAttach(PIN_SERVO, 50, 16);
+  if (!ligarServo()) return;
   int passo = (alvo > posicaoServo) ? PASSO_GRAUS : -PASSO_GRAUS;
   for (int g = posicaoServo; (passo > 0) ? (g < alvo) : (g > alvo); g += passo) {
     escreverServo(g);
     delay(PAUSA_PASSO_MS);
   }
   escreverServo(alvo);
-  delay(300);
-  ledcDetach(PIN_SERVO);
+  delay(ESPERA_FINAL_MS);
+  soltarServo();
   posicaoServo = alvo;
   Serial.printf("Sombra %s (%d graus)\n", alvo == SOMBRA_FECHADA_GRAUS ? "FECHADA" : "ABERTA", alvo);
   publicarSombra();
@@ -108,6 +133,8 @@ void onMessage(char* topic, byte* bytes, unsigned int length) {
   Serial.printf("Cena recebida: %s\n", cenaAtual);
 
   desligarTodos(); // Limpa o estado anterior
+  // Atualiza os LEDs e confirma ANTES de mover o servo: o movimento leva ~2 s e não
+  // deve atrasar a confirmação (a latência medida na dashboard é a dos LEDs).
 
   // Lógica de ativação baseada na cena
   if (strcmp(cenaAtual, "escuro") == 0) {
@@ -126,11 +153,11 @@ void onMessage(char* topic, byte* bytes, unsigned int length) {
     digitalWrite(PIN_LED_EXTREMA, HIGH);
   }
 
-  // N3: luz alta/extrema fecha a sombra; as demais cenas abrem
-  moverSombra(cenaFechaSombra(cenaAtual) ? SOMBRA_FECHADA_GRAUS : SOMBRA_ABERTA_GRAUS);
-
   // Publica a confirmação de que os LEDs mudaram fisicamente
   publicarStatus();
+
+  // N3: a cena extrema (e a alta, se FECHAR_EM_ALTA) fecha a sombra; as demais abrem
+  moverSombra(cenaFechaSombra(cenaAtual) ? SOMBRA_FECHADA_GRAUS : SOMBRA_ABERTA_GRAUS);
 }
 
 void conectar() {
@@ -172,11 +199,15 @@ void setup() {
   pinMode(PIN_LED_EXTREMA, OUTPUT);
   desligarTodos();
 
-  // Começa com a sombra aberta (posição padrão) e solta o motor
-  ledcAttach(PIN_SERVO, 50, 16);
-  escreverServo(SOMBRA_ABERTA_GRAUS);
-  delay(500);
-  ledcDetach(PIN_SERVO);
+  // Começa com a sombra aberta (posição padrão) e solta o motor.
+  // A posição real no boot é desconhecida, então o servo vai direto (sem passos): espera o
+  // suficiente para ele completar o trajeto. Antes eram 500 ms e o braço às vezes parava no meio.
+  if (ligarServo()) {
+    escreverServo(SOMBRA_ABERTA_GRAUS);
+    delay(ESPERA_BOOT_MS);
+    soltarServo();
+  }
+  posicaoServo = SOMBRA_ABERTA_GRAUS;
 
   mqtt.setServer(MQTT_HOST, MQTT_PORT);
   mqtt.setCallback(onMessage);

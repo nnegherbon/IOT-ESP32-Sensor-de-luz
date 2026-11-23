@@ -99,7 +99,7 @@ with schemdraw.Drawing(show=False) as d:
           "Sem fonte externa: o servo usa o VIN (5 V do USB) e o GND do ESP32.\n"
           "• carga leve (braço curto + papel); ângulos com folga dos batentes\n"
           "• o firmware move em passos e DESLIGA o PWM: nunca segura a posição\n"
-          "• aberta 0° · fechada 105° · só fecha na cena extrema")
+          "• aberta 15° · fechada 120° · só fecha na cena extrema")
     d.save(str(OUT / "esquema_atuador.svg"))
     d.save(str(OUT / "esquema_atuador.png"), dpi=150)
 print("ok")

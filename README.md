@@ -26,7 +26,7 @@ Montado e validado em bancada, de ponta a ponta:
 | Parte | Como funciona |
 |---|---|
 | **Nó sensor** (`firmware/n1/Sensor_de_luz`) | lê o LDR no GPIO34 e classifica em 4 cenas: escuro < 150 · ambiente 150–399 · alta 400–999 · extrema ≥ 1000. Publica a **cena** quando ela muda e a **telemetria** (leitura bruta) a cada 2 s, com presença/LWT |
-| **Nó atuador** (`firmware/n1/Atuador_LED`) | acende o LED da cena (escuro → LED 1 · ambiente → LED 2 · alta → LED 3 · extrema → os 4), publica a confirmação retida e a presença/LWT, e move a **sombra**: aberta 0°, fechada 105°, **só na cena extrema** |
+| **Nó atuador** (`firmware/n1/Atuador_LED`) | acende o LED da cena (escuro → LED 1 · ambiente → LED 2 · alta → LED 3 · extrema → os 4), publica a confirmação retida e a presença/LWT, e move a **sombra**: aberta 15°, fechada 120°, **só na cena extrema** |
 | **Broker** | Mosquitto 2 local, no `docker compose` da dashboard (porta 1883, sem senha) |
 | **Dashboard** (`dashboard-prototipo/`) | FastAPI + PostgreSQL + React: leituras, mín/máx/média, gráfico, transições de cena, confirmações e latência, presença das placas, posição da sombra, alertas, histórico e exportação CSV/JSON. O banco fica num volume Docker e sobrevive a reinícios |
 | **Alimentação** | as duas placas só pelo USB, **sem fonte externa**; o servo usa o VIN (5 V do USB) |

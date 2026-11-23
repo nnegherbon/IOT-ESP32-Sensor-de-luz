@@ -22,7 +22,7 @@ O LDR precisa ficar **exposto à luz**. Se ele ficar dentro de uma caixa fechada
 | GPIO26 (D26) | LED 2 | saída digital | R3 330 Ω → LED → GND | ambiente |
 | GPIO25 (D25) | LED 3 | saída digital | R4 330 Ω → LED → GND | alta |
 | GPIO33 (D33) | LED 4 | saída digital | R5 330 Ω → LED → GND | extrema |
-| GPIO18 (D18) | sinal do servo | saída PWM 50 Hz (LEDC) | fio de sinal do servo (amarelo/laranja) | sombra: aberta 0°, fechada 105° (só na extrema) |
+| GPIO18 (D18) | sinal do servo | saída PWM 50 Hz (LEDC) | fio de sinal do servo (amarelo/laranja) | sombra: aberta 15°, fechada 120° (só na extrema), limitado a 15–165° |
 | VIN | +5 V do servo | — | fio vermelho do servo (trilha +) | 5 V vindos do USB |
 | GND | referência comum | — | LEDs, GND do servo (marrom) | — |
 | USB | alimentação 5 V do ESP32 e do servo | — | carregador/PC | sem fonte externa |
