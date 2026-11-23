@@ -92,13 +92,22 @@ const DATASETS: { key: string; label: string; endpoint: string; filter?: { param
 
 const PAGE = 50
 
+function freshRange(r: Range): Range {
+  if (!r.relative) return r
+  const to = new Date()
+  return { ...r, from: new Date(to.getTime() - (r.to.getTime() - r.from.getTime())), to }
+}
+
 export function History({ range, refreshKey, onRefresh }: { range: Range; refreshKey: number; onRefresh: () => void }) {
   const [key, setKey] = useState('commands')
   const [offset, setOffset] = useState(0)
   const [filter, setFilter] = useState('')
-  const [data, setData] = useState<Page<Row> | null>(null)
+  // Guarda de qual conjunto vieram os dados: ao trocar de aba, as linhas antigas não podem ser
+  // desenhadas com as colunas novas (isso quebrava a "Linha do tempo" com tela em branco).
+  const [loaded, setLoaded] = useState<{ key: string; page: Page<Row> } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const ds = DATASETS.find((d) => d.key === key)!
+  const data = loaded && loaded.key === key ? loaded.page : null
 
   useEffect(() => { setOffset(0); setFilter('') }, [key])
   useEffect(() => { setOffset(0) }, [range, filter])
@@ -107,7 +116,7 @@ export function History({ range, refreshKey, onRefresh }: { range: Range; refres
     let cancel = false
     const params = { ...rangeParams(range), limit: PAGE, offset, ...(ds.filter && filter ? { [ds.filter.param]: filter } : {}) }
     api.get<Page<Row>>(ds.endpoint, params)
-      .then((d) => { if (!cancel) { setData(d); setError(null) } })
+      .then((d) => { if (!cancel) { setLoaded({ key: ds.key, page: d }); setError(null) } })
       .catch((e) => !cancel && setError(String(e.message ?? e)))
     return () => { cancel = true }
   }, [ds, range, offset, filter, refreshKey])
@@ -119,8 +128,15 @@ export function History({ range, refreshKey, onRefresh }: { range: Range; refres
           <div className="row">
             <button className="btn small" onClick={onRefresh}>Atualizar</button>
             <span className="small muted">Exportar período:</span>
-            <a className="btn small" href={exportUrl(key, 'csv', range)}>CSV</a>
-            <a className="btn small" href={exportUrl(key, 'json', range)}>JSON</a>
+            {(['csv', 'json'] as const).map((fmt) => (
+              <a key={fmt} className="btn small" href={exportUrl(key, fmt, range)}
+                 title={fmt === 'csv' ? 'Planilha (Excel: separador ";", UTF-8)' : 'JSON (um registro por linha)'}
+                 // O período relativo ("1 h") é recalculado no clique: sem isso o "até" ficava
+                 // congelado no momento em que a aba abriu e os registros novos ficavam de fora.
+                 onClick={(e) => { e.currentTarget.href = exportUrl(key, fmt, freshRange(range)) }}>
+                {fmt.toUpperCase()}
+              </a>
+            ))}
           </div>
         }>
         <div className="filterbar">
@@ -136,9 +152,11 @@ export function History({ range, refreshKey, onRefresh }: { range: Range; refres
           )}
         </div>
         {error && <div className="banner warn">{error}</div>}
-        {data && data.items.length === 0 ? (
+        {!data && !error ? (
+          <div className="small muted" style={{ padding: '12px 0' }}>Carregando…</div>
+        ) : data && data.items.length === 0 ? (
           <Empty title="Nenhum registro no período">
-            {key === 'readings' && 'O firmware original não publica a leitura bruta; veja o patch opcional na aba Sistema.'}
+            {key === 'readings' && 'Sem leituras no período. O sensor publica a leitura bruta a cada 2 s quando está online.'}
           </Empty>
         ) : (
           <div className="table-wrap">

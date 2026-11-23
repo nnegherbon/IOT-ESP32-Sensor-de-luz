@@ -45,7 +45,7 @@ export default function App() {
   const stableRange: Range = useMemo(() => {
     if (preset !== null) {
       const to = new Date()
-      return { from: new Date(to.getTime() - preset), to, live: false }
+      return { from: new Date(to.getTime() - preset), to, live: false, relative: true }
     }
     return { from: new Date(custom.from), to: new Date(custom.to), live: false }
   }, [preset, custom, historyNonce])
@@ -60,7 +60,7 @@ export default function App() {
       <header className="topbar">
         <div className="brand">
           <svg width="28" height="28" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="7" fill="#21211f" /><circle cx="16" cy="16" r="5.5" fill="#b7d3f6" /><g stroke="#6da7ec" strokeWidth="2.2" strokeLinecap="round"><path d="M16 4.5v3M16 24.5v3M4.5 16h3M24.5 16h3M8 8l2 2M22 22l2 2M8 24l2-2M22 10l2-2" /></g></svg>
-          <div><h1>Luz Ambiente · Telemetria</h1><small>ESP32 Sensor LDR → HiveMQ → ESP32 Atuador</small></div>
+          <div><h1>Luz Ambiente · Telemetria</h1><small>ESP32 Sensor LDR → broker MQTT (Mosquitto) → ESP32 Atuador</small></div>
         </div>
         {live.demo && <Status tone="demo">Modo demonstração</Status>}
         <nav className="tabs" role="tablist">
@@ -75,7 +75,7 @@ export default function App() {
       {live.demo && (
         <div className="banner demo" role="status">
           <Status tone="demo"><b>Dados sintéticos</b></Status>
-          <span>O backend está em <code>DEMO_MODE</code>: um gerador local produz mensagens no formato real do firmware (inclusive a telemetria do patch opcional). Nada vem dos ESP32 e esses registros ficam separados (<code>is_demo</code>). Desative para usar o HiveMQ.</span>
+          <span>O backend está em <code>DEMO_MODE</code>: um gerador local produz mensagens no formato real do firmware (inclusive a telemetria do patch opcional). Nada vem dos ESP32 e esses registros ficam separados (<code>is_demo</code>). Desative para usar o broker MQTT real.</span>
         </div>
       )}
       {!live.demo && live.broker.status !== 'conectado' && (

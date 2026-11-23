@@ -22,12 +22,29 @@ TOPIC_COMMAND = f"{TOPIC_BASE}/atuador/luz/comando"
 # Publicado RETIDO (retain=true) após cada comando executado.
 TOPIC_ACTUATOR_STATUS = f"{TOPIC_BASE}/atuador/status"
 
-# --- Tópicos opcionais (somente com o patch aditivo em firmware-patch/) -----
-# O firmware original NÃO publica nestes tópicos. O backend apenas os escuta;
+# --- Presença (LWT) e telemetria: publicados pelos firmwares n1 atuais ----------
+# (antes só existiam no patch firmware-patch/). O backend apenas os escuta;
 # enquanto ninguém publicar, nada é exibido como existente.
 TOPIC_SENSOR_TELEMETRY = f"{TOPIC_BASE}/sensor/telemetria"
 TOPIC_SENSOR_CONNECTION = f"{TOPIC_BASE}/sensor/conexao"
 TOPIC_ACTUATOR_CONNECTION = f"{TOPIC_BASE}/atuador/conexao"
+# Atuador -> broker, RETIDO, após cada movimento do servo e no boot:
+# {"device":"atuador01","estado":"aberta"|"fechada","graus":<0..180>}
+# É a posição COMANDADA (o SG90/MG90S não tem sensor de posição).
+TOPIC_ACTUATOR_SHADE = f"{TOPIC_BASE}/atuador/sombra"
+
+# --- Servo de sombreamento (Atuador_LED.ino) ---------------------------------
+SERVO = {
+    "gpio": 18,
+    "open_deg": 0,            # SOMBRA_ABERTA_GRAUS (posição padrão)
+    "closed_deg": 105,        # SOMBRA_FECHADA_GRAUS
+    "closes_on": ["extrema"],  # FECHAR_EM_ALTA = false
+    "holds_position": False,  # PWM desligado após cada movimento
+    "step_deg": 2, "step_ms": 30,
+    "power": "USB (VIN 5 V), sem fonte externa",
+    "hardware": "aguardando servo novo (MG90S recomendado; o SG90 queimou em 22/11/2026)",
+}
+SHADE_STATES = ("aberta", "fechada")
 
 # --- ADC / cenas -------------------------------------------------------------
 # analogRead() no ESP32 (GPIO34) com resolução padrão de 12 bits: 0..4095.
@@ -61,8 +78,8 @@ ACTUATOR_SCENE_MAXLEN = 15
 
 # --- LEDs do atuador (Atuador_LED.ino) --------------------------------------
 LEDS = (
-    {"id": 1, "name": "LED 1", "gpio": 27, "const": "PIN_LED_AMBIENTE"},
-    {"id": 2, "name": "LED 2", "gpio": 26, "const": "PIN_LED_ESCURO"},
+    {"id": 1, "name": "LED 1", "gpio": 27, "const": "PIN_LED_ESCURO"},
+    {"id": 2, "name": "LED 2", "gpio": 26, "const": "PIN_LED_AMBIENTE"},
     {"id": 3, "name": "LED 3", "gpio": 25, "const": "PIN_LED_ALTA"},
     {"id": 4, "name": "LED 4", "gpio": 33, "const": "PIN_LED_EXTREMA"},
 )
@@ -70,8 +87,8 @@ LEDS = (
 # Lógica de onMessage(): desligarTodos() e depois acende conforme a cena.
 # Observação: na cena "extrema" o firmware acende os QUATRO LEDs.
 _SCENE_LEDS: dict[str, tuple[bool, bool, bool, bool]] = {
-    "escuro": (False, True, False, False),
-    "ambiente": (True, False, False, False),
+    "escuro": (True, False, False, False),
+    "ambiente": (False, True, False, False),
     "alta": (False, False, True, False),
     "extrema": (True, True, True, True),
 }
@@ -111,8 +128,10 @@ def firmware_description() -> dict:
                 "sensor_telemetry": TOPIC_SENSOR_TELEMETRY,
                 "sensor_connection": TOPIC_SENSOR_CONNECTION,
                 "actuator_connection": TOPIC_ACTUATOR_CONNECTION,
+                "actuator_shade": TOPIC_ACTUATOR_SHADE,
             },
         },
+        "servo": SERVO,
         "device_ids": {"sensor": SENSOR_CLIENT_ID, "actuator": ACTUATOR_DEVICE_ID},
         "adc": {"min": ADC_MIN, "max": ADC_MAX, "unit": "leitura bruta ADC (12 bits)"},
         "scenes": [

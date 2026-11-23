@@ -111,7 +111,7 @@ async def test_retained_status_on_subscribe(clean_db):
         await wait_for(lambda: _ret(svc.actuator["confirmed"] is not None))
         c = svc.actuator["confirmed"]
         assert c["retained"] is True and c["match_status"] == "retido_inicial"
-        assert c["leds"] == [False, True, False, False]
+        assert c["leds"] == [True, False, False, False]
     await broker.shutdown()
 
 
@@ -152,8 +152,10 @@ async def test_api_rules_export_and_websocket(clean_db):
 
             csv_resp = await http.get("/api/export/readings", params={"format": "csv"})
             assert csv_resp.status_code == 200 and "attachment" in csv_resp.headers["content-disposition"]
-            rows = list(csv.reader(io.StringIO(csv_resp.text)))
-            assert rows[0][:3] == ["id", "received_at", "raw"] and len(rows) == 5
+            # Formato para Excel pt-BR: BOM UTF-8, separador ";" e horários em Brasília
+            assert csv_resp.text.startswith("﻿")
+            rows = list(csv.reader(io.StringIO(csv_resp.text.lstrip("﻿")), delimiter=";"))
+            assert rows[0][:3] == ["id", "received_at (horário de Brasília)", "raw"] and len(rows) == 5
 
             js = (await http.get("/api/export/commands", params={"format": "json"})).json()
             assert js[0]["cena"] == "alta"

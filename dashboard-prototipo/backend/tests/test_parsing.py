@@ -14,8 +14,8 @@ def test_classify_matches_sensor_firmware_boundaries(raw, cena):
 
 
 def test_led_mapping_matches_actuator_firmware():
-    assert fw.leds_for_scene("escuro") == (False, True, False, False)    # GPIO26
-    assert fw.leds_for_scene("ambiente") == (True, False, False, False)  # GPIO27
+    assert fw.leds_for_scene("escuro") == (True, False, False, False)    # GPIO27
+    assert fw.leds_for_scene("ambiente") == (False, True, False, False)  # GPIO26
     assert fw.leds_for_scene("alta") == (False, False, True, False)      # GPIO25
     assert fw.leds_for_scene("extrema") == (True, True, True, True)      # todos
     assert fw.leds_for_scene("apagada") == (False, False, False, False)
@@ -33,7 +33,7 @@ def test_actuator_status_payload():
     # snprintf(..., "{\"device\":\"%s\",\"estado\":\"%s_executada\"}", DEVICE_ID, cenaAtual)
     m = p.parse(fw.TOPIC_ACTUATOR_STATUS, b'{"device":"atuador01","estado":"ambiente_executada"}')
     assert isinstance(m, p.ConfirmationMsg)
-    assert (m.device, m.cena, m.leds) == ("atuador01", "ambiente", (True, False, False, False))
+    assert (m.device, m.cena, m.leds) == ("atuador01", "ambiente", (False, True, False, False))
 
 
 def test_actuator_default_state_is_parsed_but_unknown():

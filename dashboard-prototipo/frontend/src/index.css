@@ -235,4 +235,6 @@ td.payload { font-family: var(--mono); font-size: 12px; color: var(--text-second
 .switch input:focus-visible + span { outline: 2px solid var(--series-1); outline-offset: 2px; }
 .error-text { color: #ef6b6b; font-size: 12px; }
 .pill { font-size: 11px; padding: 1px 7px; border-radius: 999px; background: var(--surface-3); color: var(--text-secondary); white-space: nowrap; }
+.pill.good { color: #49c449; }
+.pill.warn { color: var(--warning); }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }

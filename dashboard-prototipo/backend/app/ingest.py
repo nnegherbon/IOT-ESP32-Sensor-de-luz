@@ -44,7 +44,7 @@ class TelemetryService:
         self.sensor: dict[str, Any] = {"last_message_at": None, "last_command": None, "last_reading": None,
                                        "telemetry_seen": False, "presence": None}
         self.actuator: dict[str, Any] = {"device": None, "last_message_at": None, "confirmed": None,
-                                         "presence": None}
+                                         "presence": None, "shade": None}
         self.last_message_at: datetime | None = None
         self._broker_recorded: str | None = None
 
@@ -56,6 +56,10 @@ class TelemetryService:
             cmd = await c.fetchrow("SELECT * FROM scene_commands WHERE is_demo=$1 ORDER BY received_at DESC, id DESC LIMIT 1", d)
             conf = await c.fetchrow("SELECT * FROM actuator_confirmations WHERE is_demo=$1 ORDER BY received_at DESC, id DESC LIMIT 1", d)
             rd = await c.fetchrow("SELECT * FROM sensor_readings WHERE is_demo=$1 ORDER BY received_at DESC, id DESC LIMIT 1", d)
+            sh = await c.fetchrow("SELECT * FROM shade_events WHERE is_demo=$1 AND kind='posicao'"
+                                  " ORDER BY received_at DESC, id DESC LIMIT 1", d)
+            if sh:
+                self.actuator["shade"] = self._shade_view(sh)
             last = await c.fetchrow(
                 "SELECT max(received_at) FILTER (WHERE origin='sensor') s, max(received_at) FILTER (WHERE origin='atuador') a,"
                 " max(received_at) m FROM mqtt_messages WHERE is_demo=$1", d)
@@ -99,6 +103,13 @@ class TelemetryService:
     def _reading_view(r) -> dict:
         return {"id": r["id"], "raw": r["raw"], "cena_computed": r["cena_computed"],
                 "cena_reported": r["cena_reported"], "at": r["received_at"], "uptime_ms": r["uptime_ms"]}
+
+    @staticmethod
+    def _shade_view(r) -> dict:
+        pos = r["position_deg"]
+        payload = r["payload"] if isinstance(r["payload"], dict) else {}
+        return {"id": r["id"], "estado": r["command"], "graus": float(pos) if pos is not None else None,
+                "at": r["received_at"], "retained": bool(payload.get("_retida"))}
 
     def sync_state(self) -> str:
         cmd, conf = self.sensor["last_command"], self.actuator["confirmed"]
@@ -205,6 +216,8 @@ class TelemetryService:
                     result["reading"] = await self._store_reading(c, parsed, msg_id, at)
                 elif isinstance(parsed, p.ConnectionMsg):
                     result["presence"] = await self._store_presence(c, parsed, at, retained)
+                elif isinstance(parsed, p.ShadeMsg):
+                    result["shade"] = await self._store_shade(c, parsed, msg_id, at, retained)
         except Exception as e:  # falha de banco ou bug: registra fora da transação abortada
             log.exception("erro ao processar mensagem de %s", topic)
             self.stats["erros"] += 1
@@ -327,6 +340,18 @@ class TelemetryService:
         target = self.sensor if m.component == "sensor" else self.actuator
         target["presence"] = {"status": m.status, "at": at, "retained": retained}
         return {"component": m.component, "event": m.status, "at": at, "detail": detail}
+
+    async def _store_shade(self, c, m: p.ShadeMsg, msg_id: int, at: datetime, retained: bool) -> dict:
+        await self._ensure_device(c, "atuador", m.device or fw.ACTUATOR_DEVICE_ID, at)
+        payload = {"device": m.device, "estado": m.estado, "graus": m.graus, "_retida": retained}
+        row = await c.fetchrow(
+            "INSERT INTO shade_events (message_id, received_at, kind, command, position_deg, payload, is_demo)"
+            " VALUES ($1,$2,'posicao',$3,$4,$5,$6) RETURNING *", msg_id, at, m.estado, m.graus, payload, self.is_demo)
+        view = self._shade_view(row)
+        # A retida só inicializa o estado se ainda não sabemos nada mais recente.
+        if not retained or self.actuator["shade"] is None:
+            self.actuator["shade"] = view
+        return view
 
     # --------------------------------------------------------------- watchdog
     async def _check_silence(self, now: datetime) -> bool:

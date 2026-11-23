@@ -134,15 +134,19 @@ function ActuatorCard({ live, config, now }: { live: LiveState; config: AppConfi
 
 function sensorStatus(live: LiveState, now: number): [Tone, string, string] {
   const s = live.sensor
-  if (s.presence) return s.presence.status === 'online'
-    ? ['good', 'Online', `anunciado ${fmtAgo(s.presence.at, now)} (LWT)`]
-    : ['critical', 'Offline', `LWT recebido ${fmtAgo(s.presence.at, now)}`]
-  if (s.telemetry_seen && s.last_reading) {
-    const age = (now - new Date(s.last_reading.at).getTime()) / 1000
-    return age < 15 ? ['good', 'Transmitindo', `telemetria ${fmtAgo(s.last_reading.at, now)}`]
-      : ['warning', 'Sem telemetria recente', `última leitura ${fmtAgo(s.last_reading.at, now)}`]
-  }
-  return ['neutral', 'Presença desconhecida', `última mensagem ${fmtAgo(s.last_message_at, now)} · publica só quando a cena muda`]
+  if (s.presence?.status === 'offline') return ['critical', 'Offline', `desconexão anunciada ${fmtAgo(s.presence.at, now)} (LWT)`]
+  const telemetriaRecente = s.telemetry_seen && s.last_reading
+    && (now - new Date(s.last_reading.at).getTime()) / 1000 < 15
+  if (s.presence?.status === 'online') return telemetriaRecente
+    ? ['good', 'Online · transmitindo', `última leitura ${fmtAgo(s.last_reading!.at, now)}`]
+    : ['warning', 'Online · sem leituras recentes', `conectado ${fmtAgo(s.presence.at, now)}`]
+  if (s.telemetry_seen && s.last_reading) return telemetriaRecente
+    ? ['good', 'Transmitindo', `última leitura ${fmtAgo(s.last_reading.at, now)}`]
+    : ['warning', 'Sem leituras recentes', `última leitura ${fmtAgo(s.last_reading.at, now)}`]
+  // Firmware sem presença/telemetria: só sabemos que publicou uma cena em algum momento
+  return s.last_message_at
+    ? ['neutral', 'Ativo · envia só na mudança de cena', `última cena ${fmtAgo(s.last_message_at, now)}`]
+    : ['neutral', 'Aguardando primeira mensagem', 'nenhuma mensagem do sensor ainda']
 }
 
 function actuatorStatus(live: LiveState, now: number): [Tone, string, string] {

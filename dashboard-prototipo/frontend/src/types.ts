@@ -23,8 +23,9 @@ export interface AppConfig {
     topics: {
       command: string
       actuator_status: string
-      optional: { sensor_telemetry: string; sensor_connection: string; actuator_connection: string }
+      optional: { sensor_telemetry: string; sensor_connection: string; actuator_connection: string; actuator_shade: string }
     }
+    servo: ServoConfig
     device_ids: { sensor: string; actuator: string }
     adc: { min: number; max: number; unit: string }
     scenes: Scene[]
@@ -65,6 +66,26 @@ export interface ReadingView {
   cena_reported: string | null
   at: string
   uptime_ms: number | null
+}
+
+export interface ServoConfig {
+  gpio: number
+  open_deg: number
+  closed_deg: number
+  closes_on: string[]
+  holds_position: boolean
+  step_deg: number
+  step_ms: number
+  power: string
+  hardware: string
+}
+
+export interface ShadeView {
+  id: number
+  estado: 'aberta' | 'fechada'
+  graus: number | null
+  at: string
+  retained: boolean
 }
 
 export interface Presence {
@@ -121,6 +142,7 @@ export interface LiveState {
     last_message_at: string | null
     confirmed: ConfirmationView | null
     presence: Presence | null
+    shade: ShadeView | null
   }
   sync: SyncState
   last_message_at: string | null
@@ -259,4 +281,6 @@ export interface Range {
   from: Date
   to: Date
   live: boolean
+  /** true quando vem de um período relativo ("1 h", "24 h"...): a exportação recalcula até "agora". */
+  relative?: boolean
 }

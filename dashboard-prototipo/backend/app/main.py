@@ -6,7 +6,7 @@ import io
 import json
 import logging
 from contextlib import asynccontextmanager, suppress
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import Literal
 
 from fastapi import FastAPI, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
@@ -23,6 +23,11 @@ from .demo import DemoGenerator
 from .hub import Hub, dumps
 from .ingest import TelemetryService
 from .mqtt_client import run_mqtt
+
+# Exportação CSV: horários em Brasília (UTC-3, sem horário de verão desde 2019) para abrir legível
+# em planilha. O JSON mantém ISO 8601 em UTC, que é o formato para máquinas.
+EXPORT_TZ = timezone(timedelta(hours=-3), "BRT")
+TIME_COLS = {"received_at", "occurred_at", "confirmed_at", "opened_at", "closed_at", "acknowledged_at"}
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("luz")
@@ -121,7 +126,7 @@ def create_app(settings: Settings | None = None, *, start_background: bool = Tru
                      "tls": settings.mqtt_tls, "subscription": settings.mqtt_subscribe,
                      "auth": bool(settings.mqtt_username)},  # nunca expõe usuário/senha
             "firmware": fw.firmware_description(),
-            "features": {"servo": False},
+            "features": {"servo": True},  # lógica do servo no firmware; hardware aguardando troca
         }
 
     @app.get("/api/state")
@@ -256,27 +261,40 @@ def create_app(settings: Settings | None = None, *, start_background: bool = Tru
                f" ORDER BY {tcol}")
         pool = req.app.state.pool
 
+        def csv_line(values: list) -> str:
+            buf = io.StringIO()
+            # ";" é o separador que o Excel em português espera (com "," tudo cai numa coluna só)
+            csv.writer(buf, delimiter=";", lineterminator="\r\n").writerow(values)
+            return buf.getvalue()
+
+        def csv_cell(v):
+            if isinstance(v, datetime):
+                return v.astimezone(EXPORT_TZ).strftime("%d/%m/%Y %H:%M:%S")
+            if isinstance(v, bool):
+                return "sim" if v else "não"
+            if isinstance(v, dict):  # detalhes legíveis em vez de um bloco JSON
+                return " | ".join(f"{k}: {csv_cell(x) if x is not None else '—'}" for k, x in v.items())
+            if isinstance(v, list):
+                return ", ".join(str(csv_cell(x)) for x in v)
+            return v
+
         async def gen():
             async with pool.acquire() as c, c.transaction():
                 first = True
                 if format == "json":
-                    yield "["
+                    yield "[\n"
                 else:
-                    buf = io.StringIO()
-                    csv.writer(buf).writerow(cols)
-                    yield buf.getvalue()
+                    # BOM: faz o Excel abrir como UTF-8 (acentos corretos)
+                    yield "﻿" + csv_line([f"{col} (horário de Brasília)" if col in TIME_COLS else col
+                                               for col in cols])
                 async for r in c.cursor(sql, settings.demo_mode, f, t, prefetch=500):
                     if format == "json":
-                        yield ("" if first else ",") + dumps(dict(r))
+                        yield ("" if first else ",\n") + "  " + dumps(dict(r))
                     else:
-                        buf = io.StringIO()
-                        csv.writer(buf).writerow(
-                            [json.dumps(v, ensure_ascii=False) if isinstance(v, (dict, list))
-                             else (v.isoformat() if isinstance(v, datetime) else v) for v in r.values()])
-                        yield buf.getvalue()
+                        yield csv_line([csv_cell(v) for v in r.values()])
                     first = False
                 if format == "json":
-                    yield "]"
+                    yield "\n]\n"
 
         name = f"{dataset}_{f:%Y%m%dT%H%M}_{t:%Y%m%dT%H%M}{'_demo' if settings.demo_mode else ''}.{format}"
         media = "application/json" if format == "json" else "text/csv; charset=utf-8"

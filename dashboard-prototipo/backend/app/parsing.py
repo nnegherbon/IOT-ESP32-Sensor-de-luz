@@ -51,6 +51,14 @@ class ConnectionMsg:
 
 
 @dataclass
+class ShadeMsg:
+    """Atuador -> broker (retido): {"device": "...", "estado": "aberta"|"fechada", "graus": 0..180}"""
+    device: str | None
+    estado: str
+    graus: float | None
+
+
+@dataclass
 class UnhandledMsg:
     """Tópico sob a base que o backend ainda não interpreta (ex.: servo futuro)."""
     payload_json: Any | None = None
@@ -62,13 +70,16 @@ class ParseError:
     details: dict = field(default_factory=dict)
 
 
-Parsed = Union[CommandMsg, ConfirmationMsg, TelemetryMsg, ConnectionMsg, UnhandledMsg, ParseError]
+Parsed = Union[CommandMsg, ConfirmationMsg, TelemetryMsg, ConnectionMsg, ShadeMsg, UnhandledMsg, ParseError]
+
+KNOWN_TOPICS = (fw.TOPIC_COMMAND, fw.TOPIC_ACTUATOR_STATUS, fw.TOPIC_SENSOR_TELEMETRY,
+                fw.TOPIC_SENSOR_CONNECTION, fw.TOPIC_ACTUATOR_CONNECTION, fw.TOPIC_ACTUATOR_SHADE)
 
 
 def topic_origin(topic: str) -> str:
     if topic in (fw.TOPIC_COMMAND, fw.TOPIC_SENSOR_TELEMETRY, fw.TOPIC_SENSOR_CONNECTION):
         return "sensor"
-    if topic in (fw.TOPIC_ACTUATOR_STATUS, fw.TOPIC_ACTUATOR_CONNECTION):
+    if topic in (fw.TOPIC_ACTUATOR_STATUS, fw.TOPIC_ACTUATOR_CONNECTION, fw.TOPIC_ACTUATOR_SHADE):
         return "atuador"
     return "desconhecida"
 
@@ -137,15 +148,25 @@ def _parse_connection(component: str, data: dict) -> Parsed:
     return ConnectionMsg(component=component, device=device, status=status)
 
 
+def _parse_shade(data: dict) -> Parsed:
+    estado = data.get("estado")
+    if estado not in fw.SHADE_STATES:
+        return ParseError("campo_estado_sombra_invalido", {"estado": estado})
+    graus = data.get("graus")
+    if graus is not None and (isinstance(graus, bool) or not isinstance(graus, (int, float)) or not 0 <= graus <= 180):
+        return ParseError("campo_graus_invalido", {"graus": graus})
+    device = data.get("device") if isinstance(data.get("device"), str) else None
+    return ShadeMsg(device=device, estado=estado, graus=float(graus) if graus is not None else None)
+
+
 def parse(topic: str, payload: bytes) -> Parsed:
-    if topic not in (fw.TOPIC_COMMAND, fw.TOPIC_ACTUATOR_STATUS, fw.TOPIC_SENSOR_TELEMETRY,
-                     fw.TOPIC_SENSOR_CONNECTION, fw.TOPIC_ACTUATOR_CONNECTION):
+    if topic not in KNOWN_TOPICS:
         try:
             return UnhandledMsg(json.loads(payload.decode("utf-8")) if payload else None)
         except (UnicodeDecodeError, json.JSONDecodeError):
             return UnhandledMsg(None)
 
-    if topic == fw.TOPIC_ACTUATOR_STATUS and payload == b"":
+    if topic in (fw.TOPIC_ACTUATOR_STATUS, fw.TOPIC_ACTUATOR_SHADE) and payload == b"":
         # Mensagem vazia retida = alguém limpou o retain do tópico
         return ParseError("payload_vazio")
 
@@ -160,4 +181,6 @@ def parse(topic: str, payload: bytes) -> Parsed:
         return _parse_telemetry(data)
     if topic == fw.TOPIC_SENSOR_CONNECTION:
         return _parse_connection("sensor", data)
+    if topic == fw.TOPIC_ACTUATOR_SHADE:
+        return _parse_shade(data)
     return _parse_connection("atuador", data)

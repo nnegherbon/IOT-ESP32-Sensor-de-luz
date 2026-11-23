@@ -25,7 +25,7 @@ const MATCH_LABEL: Record<string, string> = {
 }
 
 export function describeEvent(e: EventRow): { icon: Parameters<typeof Icon>[0]['name']; title: ReactNode; sub?: string } {
-  const d = e.detail as Record<string, unknown>
+  const d = (e.detail ?? {}) as Record<string, unknown>
   switch (e.category) {
     case 'transicao_cena':
       return {
@@ -53,6 +53,8 @@ export function describeEvent(e: EventRow): { icon: Parameters<typeof Icon>[0]['
     case 'mensagem_invalida':
       return { icon: 'bug', title: <>Mensagem inválida em <code>{String(d.topico).replace('iot/luzambiente/', '…/')}</code></>, sub: `${d.motivo} · ${d.payload ?? ''}` }
   }
+  // Categoria desconhecida: mostra algo legível em vez de derrubar a página
+  return { icon: 'bug', title: <>{String(e.category ?? 'evento')}</>, sub: e.detail ? JSON.stringify(e.detail) : undefined }
 }
 
 export function EventList({ events }: { events: EventRow[] }) {

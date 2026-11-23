@@ -1,6 +1,16 @@
-# Sobe PostgreSQL + backend (assinante MQTT/API/WebSocket) + frontend (nginx).
+# Sobe broker MQTT (Mosquitto) + PostgreSQL + backend (assinante MQTT/API/WebSocket) + frontend (nginx).
 # Uso: cp .env.example .env && docker compose up -d --build  → http://localhost:8080
+# Os ESP32 publicam no IP deste computador, porta 1883 (libere a porta no firewall do Windows).
 services:
+  mosquitto:
+    image: eclipse-mosquitto:2
+    restart: unless-stopped
+    ports:
+      - "${MQTT_PUBLIC_PORT:-1883}:1883"
+    volumes:
+      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - mosquitto-data:/mosquitto/data
+
   db:
     image: postgres:16-alpine
     restart: unless-stopped
@@ -24,6 +34,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      mosquitto:
+        condition: service_started
     env_file: .env
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-luz}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-luz}
@@ -39,3 +51,4 @@ services:
 
 volumes:
   pgdata:
+  mosquitto-data:
