@@ -2,14 +2,14 @@
 
 > **Protótipo adiantado** do backend, banco e interface da N3, construído sobre o **contrato da N1**
 > (`iot/luzambiente/...`). Na Unidade 3 ele será migrado ao [contrato v1](../contrato/v1/CONTRATO_v1.md)
-> e ganhará o envio de comandos, o motor de decisão e o login (ver `docs/CP12_PROJETO_v1.0.md`, seção 3).
+> e ganhará o envio de comandos, o motor de decisão e o login.
 
 Plataforma de telemetria para o projeto [IOT-ESP32-Sensor-de-luz](https://github.com/nnegherbon/IOT-ESP32-Sensor-de-luz):
-assina o HiveMQ, grava todo o histórico em PostgreSQL e apresenta em tempo real a cena de luminosidade,
-o estado comandado × confirmado do atuador, a conectividade dos módulos, estatísticas e alertas.
+sobe o broker Mosquitto local, grava todo o histórico em PostgreSQL e apresenta em tempo real a leitura do LDR, a cena,
+o estado comandado × confirmado do atuador, a posição da sombra, a conectividade dos módulos, estatísticas e alertas.
 
 ```
-ESP32 Sensor ──MQTT──▶ HiveMQ ──MQTT──▶ ESP32 Atuador
+ESP32 Sensor ──MQTT──▶ Mosquitto (docker compose, porta 1883) ──MQTT──▶ ESP32 Atuador
                           │
                           ▼  (assinatura somente leitura: iot/luzambiente/#)
                  Backend FastAPI ──▶ PostgreSQL
@@ -22,35 +22,32 @@ ESP32 Sensor ──MQTT──▶ HiveMQ ──MQTT──▶ ESP32 Atuador
 
 | Item | Valor real no código |
 |---|---|
-| Broker | `broker.hivemq.com:1883`, sem usuário/senha |
+| Broker | Mosquitto local (`MQTT_HOST` no `.ino` = IP do PC), porta 1883, sem usuário/senha |
 | Comando (sensor → atuador) | `iot/luzambiente/atuador/luz/comando` · `{"cena":"<cena>"}` · QoS 0, **só quando a cena muda** |
 | Confirmação (atuador) | `iot/luzambiente/atuador/status` · `{"device":"atuador01","estado":"<cena>_executada"}` · **retida** |
+| Telemetria (sensor) | `iot/luzambiente/sensor/telemetria` · `{"device","leitura","cena","uptime_ms"}` a cada 2 s |
+| Presença (LWT, retida) | `iot/luzambiente/sensor/conexao` e `iot/luzambiente/atuador/conexao` · `{"device","status":"online\|offline"}` |
+| Sombra (atuador, retida) | `iot/luzambiente/atuador/sombra` · `{"device":"atuador01","estado":"aberta\|fechada","graus":N}` |
 | Client IDs | `SensorNode01` e `atuador01` |
 | Leitura | `analogRead(34)` — ADC 12 bits, 0–4095, sem calibração para lux |
 | Cenas | `escuro` < 150 · `ambiente` 150–399 · `alta` 400–999 · `extrema` ≥ 1000 |
-| LEDs | escuro → LED 2 (GPIO26) · ambiente → LED 1 (GPIO27) · alta → LED 3 (GPIO25) · **extrema → os 4 LEDs** |
+| LEDs | escuro → LED 1 (GPIO27) · ambiente → LED 2 (GPIO26) · alta → LED 3 (GPIO25) · **extrema → os 4 LEDs** |
+| Servo (GPIO18) | aberta 0° · fechada 105° · fecha **só na extrema** · PWM desligado após mover (não segura posição) |
 
 Tudo isso está centralizado em `backend/app/firmware.py`.
 
 **Consequências diretas (não contornadas com dados inventados):**
 
-- O firmware **não publica o valor do LDR** (só o imprime na Serial). Sem alterar o firmware, o painel mostra cena, transições,
-  comando × confirmação e latência, mas leitura bruta, mín/máx/média e alertas por limite ficam como "não disponível".
-- O sensor só publica na mudança de cena, então silêncio não implica desconexão; e nenhum ESP32 publica presença (LWT).
+- A **cena** só é publicada na mudança; a leitura bruta vai a cada 2 s. Silêncio de comandos não implica desconexão:
+  a presença vem do LWT.
 - Os payloads não têm horário: o timestamp é o do recebimento no backend.
 - O estado dos LEDs é **derivado** da cena confirmada pela lógica de `onMessage()`, não lido dos pinos.
+- A posição da sombra é a **comandada**: o servo não tem sensor de posição.
 
-### Patch opcional e aditivo (`firmware-patch/`)
+### `firmware-patch/` (histórico)
 
-Justificativa técnica: sem ele a leitura do LDR não sai do ESP32. Os patches **não alteram** tópicos, payloads, limites,
-client IDs nem a lógica existente — apenas acrescentam (marcado com `// [+]` no código):
-
-| Arquivo | Acrescenta |
-|---|---|
-| `Sensor_de_luz_telemetria.ino` | `iot/luzambiente/sensor/telemetria` → `{"device","leitura","cena","uptime_ms"}` a cada 2 s; LWT/presença em `iot/luzambiente/sensor/conexao` |
-| `Atuador_LED_presenca.ino` | LWT/presença em `iot/luzambiente/atuador/conexao` |
-
-O backend já escuta esses tópicos; assim que forem publicados, gráficos e alertas correspondentes passam a funcionar sem nenhuma mudança no painel.
+Primeira versão aditiva da telemetria e da presença sobre o firmware da N1. Esse conteúdo já foi incorporado aos
+firmwares em uso, em [`../firmware/n1/`](../firmware/n1/); use aqueles.
 
 ## 2. Execução rápida (Docker Compose)
 
@@ -61,13 +58,13 @@ docker compose up -d --build
 # API:     http://localhost:8080/api/health
 ```
 
-Serviços: `db` (PostgreSQL 16, volume `pgdata`), `backend` (assinante MQTT + API + WebSocket), `frontend` (nginx servindo o SPA
+Serviços: `mosquitto` (broker MQTT, porta 1883 aberta na rede para os ESP32), `db` (PostgreSQL 16, volume `pgdata`), `backend` (assinante MQTT + API + WebSocket), `frontend` (nginx servindo o SPA
 e fazendo proxy de `/api` e `/ws`). As migrações rodam automaticamente na subida do backend.
 
 ### Modo demonstração
 
 Se o broker ou os dispositivos não estiverem acessíveis, defina `DEMO_MODE=true` no `.env`. Um gerador local produz mensagens
-**no formato exato do firmware** (incluindo a telemetria do patch e falhas ocasionais de confirmação) pelo mesmo pipeline de ingestão.
+**no formato exato do firmware** (incluindo a telemetria e falhas ocasionais de confirmação) pelo mesmo pipeline de ingestão.
 O painel exibe uma faixa "Dados sintéticos", o backend não se conecta ao broker, e os registros ficam com `is_demo=true` —
 nunca se misturam com os reais. Volte para `DEMO_MODE=false` para a integração real.
 
@@ -105,8 +102,9 @@ python scripts/simulate_devices.py --host localhost --telemetria --perder 0.05
 
 | Variável | Padrão | Descrição |
 |---|---|---|
-| `MQTT_HOST` / `MQTT_PORT` | `broker.hivemq.com` / `1883` | mesmos do firmware |
-| `MQTT_USERNAME` / `MQTT_PASSWORD` / `MQTT_TLS` | vazio / vazio / `false` | para um cluster HiveMQ Cloud privado (porta 8883 + TLS) |
+| `MQTT_HOST` / `MQTT_PORT` | `mosquitto` / `1883` | broker do compose; fora do Docker, `localhost` |
+| `MQTT_USERNAME` / `MQTT_PASSWORD` / `MQTT_TLS` | vazio / vazio / `false` | para um broker com autenticação (ex.: porta 8883 + TLS) |
+| `HTTP_PORT` | `8080` | porta do painel no PC |
 | `MQTT_SUBSCRIBE` | `iot/luzambiente/#` | tópicos desconhecidos sob a base são guardados como `nao_tratado` |
 | `MQTT_CLIENT_ID_PREFIX` | `luz-dashboard` | sempre recebe sufixo aleatório para não derrubar `SensorNode01`/`atuador01` |
 | `DEMO_MODE` | `false` | dados sintéticos isolados |
@@ -124,11 +122,11 @@ Esquema em `backend/app/migrations/001_init.sql` (aplicado automaticamente, cont
 | `mqtt_messages` | toda mensagem recebida: tópico, payload, QoS, retida, status (`ok`, `invalido`, `nao_tratado`, `erro_processamento`), motivo do erro |
 | `scene_commands` | transições de cena do sensor, cena anterior, status (`aguardando`, `confirmado`, `sem_confirmacao`, `substituido`), latência |
 | `actuator_confirmations` | confirmações do atuador, LEDs derivados, correspondência com o comando, flag de mensagem retida |
-| `sensor_readings` | leituras brutas do LDR (somente com o patch) |
+| `sensor_readings` | leituras brutas do LDR (telemetria a cada 2 s) |
 | `connectivity_events` | conexão/desconexão do broker, presença (LWT), falhas de confirmação, silêncio |
 | `alert_rules` / `alerts` | regras configuráveis e histórico de alertas (um aberto por regra) |
 | `devices` | dispositivos vistos e última atividade |
-| `shade_events` | **reservada** para o servomotor (não implementado no firmware; nada a preenche) |
+| `shade_events` | posições da sombra publicadas pelo atuador (`kind='posicao'`, aberta/fechada, graus) |
 | `v_events` (view) | linha do tempo unificada |
 
 Todas as tabelas têm `is_demo`, chaves estrangeiras para a mensagem de origem e índices por `(is_demo, tempo)`.
@@ -162,11 +160,11 @@ Regras padrão (editáveis na aba **Alertas**):
 |---|---|---|
 | Cena `extrema` | **ativa** | categoria definida pelo próprio firmware |
 | Cena `escuro` | inativa | idem |
-| Leitura bruta acima / abaixo | inativa, limite **vazio** | o projeto não define; exige o patch de telemetria |
+| Leitura bruta acima / abaixo | inativa, limite **vazio** | o projeto não define |
 | Sem mensagens do sensor / atuador | inativa, prazo **vazio** | silêncio pode ser normal (publicação só na mudança) |
 | Atuador não confirmou | inativa, prazo **vazio** | não definido no firmware |
 | Backend desconectado do broker | **ativa** | detecção direta |
-| Dispositivo offline (LWT) | **ativa** | só dispara com o patch de presença |
+| Dispositivo offline (LWT) | **ativa** | presença publicada pelos dois firmwares |
 
 Regras com limite vazio não podem ser ativadas (a API responde 422). A aba também mostra o histórico de alertas e os
 **períodos de exposição intensa** (trechos contínuos em `alta`/`extrema`).
@@ -182,7 +180,7 @@ Regras com limite vazio não podem ser ativadas (a API responde 422). A aba tamb
 | GET | `/api/analytics/scenes` | intervalos, distribuição por tempo e períodos intensos |
 | GET/POST/PUT/DELETE | `/api/alert-rules[/{id}]` | regras |
 | POST | `/api/alerts/{id}/ack` | reconhecer alerta |
-| GET | `/api/export/{dataset}?format=csv\|json` | `readings`, `commands`, `confirmations`, `connectivity`, `messages`, `alerts`, `events` (streaming) |
+| GET | `/api/export/{dataset}?format=csv\|json` | `readings`, `commands`, `confirmations`, `connectivity`, `messages`, `alerts`, `events` (streaming). CSV para Excel pt-BR: `;`, BOM UTF-8, horários de Brasília. JSON: um registro por linha, horários ISO 8601 em UTC |
 | WS | `/ws` | eventos `state`, `command`, `confirmation`, `reading`, `connectivity`, `alert`, `message_invalid` |
 
 Período padrão: últimas 24 h.
@@ -203,16 +201,20 @@ paginação, estatísticas e análise de cenas; exportação CSV/JSON; WebSocket
 
 ## 10. Limitações e segurança
 
-- O HiveMQ público não tem autenticação: qualquer cliente pode publicar nesses tópicos. Mensagens fora do formato são
-  registradas como inválidas; mensagens bem formadas de terceiros não são distinguíveis dos dispositivos.
-  Para produção, use um cluster privado com usuário/senha e TLS (já suportado por variáveis de ambiente).
-- O repositório original contém credenciais de Wi-Fi no código-fonte; recomenda-se removê-las e trocar a senha.
+- O Mosquitto local não tem usuário nem senha e escuta na rede (porta 1883): qualquer dispositivo da mesma rede pode
+  publicar nesses tópicos. Mensagens fora do formato são registradas como inválidas; mensagens bem formadas de
+  terceiros não são distinguíveis dos dispositivos. Para produção, use usuário/senha e TLS (já suportado por variáveis
+  de ambiente).
+- Os ESP32 usam o IP fixo do PC: se ele mudar (DHCP), as placas param de conectar até o firmware ser regravado.
+- As credenciais de Wi-Fi ficam só na cópia local dos `.ino`; no repositório, são placeholders.
 - A API não tem autenticação; exponha-a apenas em rede confiável ou atrás de um proxy autenticado.
-- Durações de cena assumem que a cena vigente vale até a próxima transição; períodos com o sensor desligado só são
-  distinguíveis com o patch de presença.
+- Durações de cena assumem que a cena vigente vale até a próxima transição; os períodos com o sensor desligado aparecem
+  pela presença (LWT).
+- Os dados só são coletados enquanto o PC, o Docker e as duas placas estão ligados.
 
-## 11. Servomotor (futuro)
+## 11. Servomotor (sombra)
 
-Nada relativo ao servo é exibido como existente. A preparação consiste em: tabela `shade_events` (comando, posição,
-confirmação), assinatura de todo `iot/luzambiente/#` (mensagens futuras já ficam guardadas como `nao_tratado`) e o
-interpretador em `backend/app/parsing.py`, onde basta acrescentar o tópico e o formato quando forem definidos no firmware.
+O atuador publica a posição em `iot/luzambiente/atuador/sombra` (retida) ao conectar e após cada movimento. O backend
+grava em `shade_events`, mantém a última posição no estado ao vivo, e a aba **Sistema** mostra a configuração do servo
+(GPIO, ângulos, regra de fechamento, alimentação) e a última posição recebida. O SG90 original queimou; até o servo
+novo (MG90S) ser instalado, a posição continua sendo publicada, mas fisicamente nada se move.

@@ -1,11 +1,11 @@
-"""Esquema elétrico do projeto (alvo da N3, desenhado para a N2, sem bancada).
+"""Esquema elétrico do projeto (montagem atual, validada em bancada em 11/2026).
 
 Gera esquema_sensor.{svg,png} e esquema_atuador.{svg,png}:
     pip install schemdraw matplotlib
-    python docs/esquema_eletrico/esquema.py
+    python docs/hardware/esquema_eletrico/esquema.py
 
 Todos os símbolos de terra (⏚) de um mesmo nó são o MESMO ponto elétrico.
-No nó atuador, o GND do ESP32 e o negativo da fonte de 5 V do servo são interligados (GND comum).
+No nó atuador não há fonte externa: o servo é alimentado pelo VIN (5 V do USB) e divide o GND do ESP32.
 """
 from pathlib import Path
 
@@ -61,42 +61,45 @@ with schemdraw.Drawing(show=False) as d:
 # ---------------------------------------------------------------- atuador
 with schemdraw.Drawing(show=False) as d:
     d.config(unit=2.5)
-    E = d.add(ic(["GPIO27", "GPIO26", "GPIO25", "GPIO33", "GPIO18", "GND"], "", 1.8))
+    E = d.add(ic(["GPIO27", "GPIO26", "GPIO25", "GPIO33", "GPIO18", "VIN", "GND"], "", 1.8))
     d += elm.Label().at((E.center[0], E["GPIO27"][1] + 1.9)).label("ESP32 DevKit V1 #2 · atuador01 · USB 5 V", fontsize=12)
-    for pin, r, led in (("GPIO27", "R2 220 Ω", "LED1 (ambiente)"), ("GPIO26", "R3 220 Ω", "LED2 (escuro)"),
-                        ("GPIO25", "R4 220 Ω", "LED3 (alta)"), ("GPIO33", "R5 220 Ω", "LED4 (extrema)")):
+    for pin, r, led in (("GPIO27", "R2 330 Ω", "LED1 (escuro)"), ("GPIO26", "R3 330 Ω", "LED2 (ambiente)"),
+                        ("GPIO25", "R4 330 Ω", "LED3 (alta)"), ("GPIO33", "R5 330 Ω", "LED4 (extrema)")):
         d += elm.Line().at(E[pin]).right(0.5)
         d += elm.Resistor().right(2.4).label(r, loc="top", ofst=0.05)
         d += elm.LED().right(2.4).label(led, loc="top", ofst=0.05)
         d += elm.Line().right(0.4)
         d += elm.Ground(lead=False).right()
-    # GPIO18 -> servo
-    d += elm.Line().at(E["GPIO18"]).right(1.4)
+    # GPIO18 -> sinal do servo (pull-down opcional)
+    d += elm.Line().at(E["GPIO18"]).right(4.8)
     S = d.here
     d += elm.Dot()
-    d += elm.Resistor().down(2.4).label("R6 10 kΩ\npull-down", loc="bottom", ofst=0.3)
+    d += elm.Resistor().down(2.4).label("R6 10 kΩ\npull-down\n(opcional)", loc="bottom", ofst=0.3)
     d += elm.Ground()
     sv = elm.Ic(pins=[elm.IcPin(name="SIG", side="left", slot="2/2"),
                       elm.IcPin(name="V+", side="right", slot="2/2"),
                       elm.IcPin(name="GND", side="right", slot="1/2")],
                 size=(3.0, 2.4), pinspacing=1.2)
-    d += elm.Line().at(S).right(6.4).label("PWM 50 Hz, 3,3 V", loc="top", fontsize=10)
+    d += elm.Line().at(S).right(4.0).label("PWM 50 Hz, 3,3 V", loc="top", fontsize=10)
     SV = d.add(sv.anchor("SIG"))
-    d += elm.Label().at((SV.center[0], SV["SIG"][1] + 1.0)).label("Servo SG90 (ponte H interna)", fontsize=11)
+    d += elm.Label().at((SV.center[0], SV["SIG"][1] + 1.0)).label("Servo SG90 / MG90S", fontsize=11)
     d += elm.Line().at(SV["GND"]).right(0.6)
     d += elm.Ground()
     d += elm.Line().at(SV["V+"]).right(1.6)
     V = d.here
-    d += elm.Dot().label("+5 V servo", loc="top", ofst=0.15)
-    d += elm.Capacitor(polar=True).down(2.6).label("C2\n470 µF / 16 V", loc="bottom", ofst=0.3)
+    d += elm.Dot().label("+5 V (VIN)", loc="top", ofst=0.15)
+    d += elm.Capacitor(polar=True).down(2.6).label("C1 100 µF\n(opcional)", loc="bottom", ofst=0.3)
     d += elm.Ground()
-    d += elm.Line().at(V).right(4.2)
-    d += elm.SourceV().down(2.6).reverse().label("Fonte\n5 V / 2 A", loc="bottom", ofst=0.4)
-    d += elm.Ground()
+    # VIN do ESP32 -> +5 V do servo: mesma rede, indicada por rótulo (evita fio cruzando o GND)
+    d += elm.Line().at(E["VIN"]).right(0.8)
+    d += elm.Dot(open=True).label("+5 V (VIN)", loc="right", ofst=0.15, fontsize=11)
     d += elm.Line().at(E["GND"]).right(0.6)
     d += elm.Ground()
-    d += elm.Label().at((SV.center[0] + 1.5, E["GND"][1] - 2.0)).label(
-        "Todo símbolo de terra = GND COMUM (ESP32 #2 + fonte 5 V + servo)", fontsize=11)
+    notas(d, (E.center[0] - 1.8, E["GND"][1] - 1.6),
+          "Sem fonte externa: o servo usa o VIN (5 V do USB) e o GND do ESP32.\n"
+          "• carga leve (braço curto + papel); ângulos com folga dos batentes\n"
+          "• o firmware move em passos e DESLIGA o PWM: nunca segura a posição\n"
+          "• aberta 0° · fechada 105° · só fecha na cena extrema")
     d.save(str(OUT / "esquema_atuador.svg"))
     d.save(str(OUT / "esquema_atuador.png"), dpi=150)
 print("ok")

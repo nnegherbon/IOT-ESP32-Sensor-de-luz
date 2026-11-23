@@ -123,7 +123,7 @@ o atuador **não executa de novo** e republica o ack original.
 | `sombra` / `servo_graus` | `aberta`/0° ou `fechada`/90°; ambos `null` = posição desconhecida (após o boot, servo sem PWM) |
 | `manual_restante_s` | segundos até o timeout do modo manual; `null` fora do manual |
 
-Mapeamento cena → LEDs, mantido da N1: escuro → LED 2 · ambiente → LED 1 · alta → LED 3 · extrema → LEDs 1 a 4.
+Mapeamento cena → LEDs (revisado em 11/2026; na N1 o escuro era o LED 2 e o ambiente o LED 1): escuro → LED 1 · ambiente → LED 2 · alta → LED 3 · extrema → LEDs 1 a 4. A sombra fecha só na cena extrema.
 
 ## 3. QoS, retenção e tempos
 
