@@ -39,6 +39,26 @@
       "type": "integer",
       "minimum": -120,
       "maximum": 0
+    },
+    "sensor_ok": {
+      "type": "boolean",
+      "description": "v1.1: false quando a leitura é implausível (saturada ou instável)"
+    },
+    "falha": {
+      "enum": [
+        "saturado",
+        "instavel"
+      ],
+      "description": "v1.1: motivo de sensor_ok=false"
+    },
+    "hora_sync": {
+      "type": "boolean",
+      "description": "v1.1: true se o ESP32 sincronizou a hora por NTP"
+    },
+    "ts": {
+      "type": "string",
+      "format": "date-time",
+      "description": "v1.1: hora UTC do ESP32, só quando hora_sync=true"
     }
   },
   "required": [

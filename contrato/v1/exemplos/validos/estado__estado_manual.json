@@ -4,8 +4,8 @@
   "modo": "manual",
   "cena": "ambiente",
   "leds": [
-    true,
     false,
+    true,
     false,
     false
   ],

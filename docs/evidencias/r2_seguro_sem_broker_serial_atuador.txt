@@ -1,0 +1,15 @@
+﻿# R2/R10.2 Atuador sem broker (24/11/2026 11:58): broker parado por 50 s; Serial do atuador01
+(+ 15 tentativas de reconexão 'MQTT: falhou ... nova tentativa em 3 s' omitidas)
+
+[  911854] sensor OFFLINE
+[  911855] MODO SEGURO: sensor_offline
+[  911928] backend OFFLINE
+[  912014] MQTT desconectado
+[  962809] MQTT conectado em 192.168.68.102 (assinaturas refeitas)
+[  963119] backend OFFLINE
+[  963124] sensor online
+[  975984] backend online
+[  975984] condi????es normalizadas: modo AUTO (aguardando comando do backend)
+[  976470] ack c-20261124-000007 recebido
+[  976471] cena alta ?? sombra aberta (auto)
+[  976472] ack c-20261124-000007 executado

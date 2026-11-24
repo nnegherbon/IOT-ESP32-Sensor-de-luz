@@ -1,0 +1,28 @@
+# Evidências geradas em 24/11/2026 11:53 contra o sistema real (backend + atuador01 físico)
+
+## R9: comando sem login
+HTTP 401
+
+## R16: perfil operador tenta comandar
+{"detail":"seu perfil (operador) só visualiza; comandos e configurações exigem admin"}
+HTTP 403
+
+## R10.4a: comando inválido (cena inexistente) recusado pela API
+{"detail":"comando inválido: cena deve ser uma de ['escuro', 'ambiente', 'alta', 'extrema']"}
+HTTP 422
+
+## R7: comando proibido (cena manual com o atuador em AUTO) -> rejeitado pelo atuador com motivo
+{"cmd_id":"c-20261124-000002","device":"atuador01","origem":"manual","acao":"aplicar","cena":"escuro","sombra":"aberta","modo":null,"duracao_s":null,"requested_by":"admin","reason":"enviado pela interface","status":"enviado","motivo":null,"sent_at":"2026-11-24T14:53:37.906510+00:00","received_at":null,"executed_at":null,"confirmed_at":null,"retries":0,"duplicate_acks":0,"latency_ms":null}
+{"cmd_id":"c-20261124-000002","device":"atuador01","origem":"manual","acao":"aplicar","cena":"escuro","sombra":"aberta","modo":null,"duracao_s":null,"requested_by":"admin","reason":"enviado pela interface","status":"rejeitado","motivo":"modo_incompativel","sent_at":"2026-11-24T14:53:37.906510+00:00","received_at":"2026-11-24T14:53:37.986303+00:00","executed_at":"2026-11-24T14:53:38.072458+00:00","confirmed_at":null,"retries":0,"duplicate_acks":0,"latency_ms":null,"payload":{"v":1,"ts":"2026-11-24T14:53:37Z","acao":"aplicar","cena":"escuro","cmd_id":"c-20261124-000002","origem":"manual","sombra":"aberta"},"acks":[{"received_at":"2026-11-24T14:53:37.986303+00:00","resultado":"recebido","motivo":null},{"received_at":"2026-11-24T14:53:38.072458+00:00","resultado":"rejeitado","motivo":"modo_incompativel"}]}
+
+## R7: assumir controle manual (5 min) -> ciclo completo
+{"cmd_id":"c-20261124-000003","device":"atuador01","origem":"manual","acao":"definir_modo","cena":null,"sombra":null,"modo":"manual","duracao_s":300,"requested_by":"admin","reason":"enviado pela interface","status":"confirmado","motivo":null,"sent_at":"2026-11-24T14:53:42.182786+00:00","received_at":"2026-11-24T14:53:42.276173+00:00","executed_at":"2026-11-24T14:53:42.380280+00:00","confirmed_at":"2026-11-24T14:53:42.388590+00:00","retries":0,"duplicate_acks":0,"latency_ms":205,"payload":{"v":1,"ts":"2026-11-24T14:53:42Z","acao":"definir_modo","modo":"manual","cmd_id":"c-20261124-000003","origem":"manual","duracao_s":300},"acks":[{"received_at":"2026-11-24T14:53:42.276173+00:00","resultado":"recebido","motivo":null},{"received_at":"2026-11-24T14:53:42.380280+00:00","resultado":"executado","motivo":null}]}
+
+## R10.4b: comando duplicado (mesmo cmd_id reenviado) -> atuador NÃO executa de novo, reenvia o ack original
+{"cmd_id":"c-20261124-000003","device":"atuador01","origem":"manual","acao":"definir_modo","cena":null,"sombra":null,"modo":"manual","duracao_s":300,"requested_by":"admin","reason":"enviado pela interface","status":"confirmado","motivo":null,"sent_at":"2026-11-24T14:53:42.182786+00:00","received_at":"2026-11-24T14:53:42.276173+00:00","executed_at":"2026-11-24T14:53:42.380280+00:00","confirmed_at":"2026-11-24T14:53:42.388590+00:00","retries":0,"duplicate_acks":1,"latency_ms":205,"payload":{"v":1,"ts":"2026-11-24T14:53:42Z","acao":"definir_modo","modo":"manual","cmd_id":"c-20261124-000003","origem":"manual","duracao_s":300},"acks":[{"received_at":"2026-11-24T14:53:42.276173+00:00","resultado":"recebido","motivo":null},{"received_at":"2026-11-24T14:53:42.380280+00:00","resultado":"executado","motivo":null},{"received_at":"2026-11-24T14:53:47.282320+00:00","resultado":"executado","motivo":null}]}
+
+## volta ao automático
+{"cmd_id":"c-20261124-000004","device":"atuador01","origem":"manual","acao":"definir_modo","cena":null,"sombra":null,"modo":"auto","duracao_s":null,"requested_by":"admin","reason":"enviado pela interface","status":"confirmado","motivo":null,"sent_at":"2026-11-24T14:53:50.085257+00:00","received_at":"2026-11-24T14:53:50.163403+00:00","executed_at":"2026-11-24T14:53:50.362618+00:00","confirmed_at":"2026-11-24T14:53:50.384972+00:00","retries":0,"duplicate_acks":0,"latency_ms":299,"payload":{"v":1,"ts":"2026-11-24T14:53:50Z","acao":"definir_modo","modo":"auto","cmd_id":"c-20261124-000004","origem":"manual"},"acks":[{"received_at":"2026-11-24T14:53:50.163403+00:00","resultado":"recebido","motivo":null},{"received_at":"2026-11-24T14:53:50.362618+00:00","resultado":"executado","motivo":null}]}
+
+## R4: telemetria inválida publicada no broker -> rejeitada e registrada pelo backend
+{"total":2,"limit":1,"offset":0,"from":"2026-11-23T14:53:59.411411+00:00","to":"2026-11-24T14:53:59.411411+00:00","items":[{"id":20641,"received_at":"2026-11-24T14:53:56.771908+00:00","topic":"luzambiente/v1/sensor/sensor01/telemetria","origin":"sensor","qos":0,"retained":false,"parse_status":"invalido","error_reason":"ldr_raw_fora_da_faixa_adc","error_details":{"ldr_raw":9999},"payload":"{\"v\":1,\"device\":\"sensor01\",\"seq\":1,\"uptime_ms\":5,\"ldr_raw\":9999}"}]}

@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
-import { api } from './api'
+import { api, getToken, setToken } from './api'
 import { Alerts } from './components/Alerts'
+import { Control } from './components/Control'
+import { Login, type SessionUser } from './components/Login'
 import { History } from './components/History'
 import { Overview } from './components/Overview'
 import { System } from './components/System'
@@ -12,15 +14,32 @@ import { useLive, useNow, useThrottled } from './useLive'
 const PRESETS: [string, number][] = [
   ['15 min', 15 * 60e3], ['1 h', 3600e3], ['6 h', 6 * 3600e3], ['24 h', 24 * 3600e3], ['7 dias', 7 * 86400e3], ['30 dias', 30 * 86400e3],
 ]
-type Tab = 'visao' | 'historico' | 'alertas' | 'sistema'
-const TABS: [Tab, string][] = [['visao', 'Visão geral'], ['historico', 'Histórico'], ['alertas', 'Alertas'], ['sistema', 'Sistema']]
+type Tab = 'controle' | 'visao' | 'historico' | 'alertas' | 'sistema'
+const TABS: [Tab, string][] = [['controle', 'Controle'], ['visao', 'Visão geral'], ['historico', 'Histórico'], ['alertas', 'Alertas'], ['sistema', 'Sistema']]
 
 export default function App() {
+  const [user, setUser] = useState<SessionUser | null>(null)
+  const [checked, setChecked] = useState(false)
+  useEffect(() => {
+    const sync = () => {
+      if (!getToken()) { setUser(null); setChecked(true); return }
+      api.get<SessionUser>('/api/auth/me').then(setUser).catch(() => setUser(null)).finally(() => setChecked(true))
+    }
+    sync()
+    window.addEventListener('luz-auth', sync)
+    return () => window.removeEventListener('luz-auth', sync)
+  }, [])
+  if (!checked) return <div className="app"><div className="empty" style={{ minHeight: '60vh' }}>Carregando…</div></div>
+  if (!user) return <Login onLogin={setUser} />
+  return <Dashboard user={user} />
+}
+
+function Dashboard({ user }: { user: SessionUser }) {
   const { state: live, wsStatus, version } = useLive()
   const now = useNow(1000)
   const [config, setConfig] = useState<AppConfig | null>(null)
   const [configError, setConfigError] = useState<string | null>(null)
-  const [tab, setTab] = useState<Tab>('visao')
+  const [tab, setTab] = useState<Tab>('controle')
   const [preset, setPreset] = useState<number | null>(3600e3)
   const [custom, setCustom] = useState<{ from: string; to: string }>(() => ({
     from: toLocalInput(new Date(Date.now() - 3600e3)), to: toLocalInput(new Date()),
@@ -60,7 +79,7 @@ export default function App() {
       <header className="topbar">
         <div className="brand">
           <svg width="28" height="28" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="7" fill="#21211f" /><circle cx="16" cy="16" r="5.5" fill="#b7d3f6" /><g stroke="#6da7ec" strokeWidth="2.2" strokeLinecap="round"><path d="M16 4.5v3M16 24.5v3M4.5 16h3M24.5 16h3M8 8l2 2M22 22l2 2M8 24l2-2M22 10l2-2" /></g></svg>
-          <div><h1>Luz Ambiente · Telemetria</h1><small>ESP32 Sensor LDR → broker MQTT (Mosquitto) → ESP32 Atuador</small></div>
+          <div><h1>Luz Ambiente</h1><small>Proteção solar automática para plantas sensíveis</small></div>
         </div>
         {live.demo && <Status tone="demo">Modo demonstração</Status>}
         <nav className="tabs" role="tablist">
@@ -70,6 +89,10 @@ export default function App() {
             </button>
           ))}
         </nav>
+        <div className="userbox">
+          <span>{user.username} · <b>{user.role}</b></span>
+          <button className="btn small" onClick={() => setToken(null)}>Sair</button>
+        </div>
       </header>
 
       {live.demo && (
@@ -85,7 +108,7 @@ export default function App() {
         </div>
       )}
 
-      {tab !== 'sistema' && (
+      {tab !== 'sistema' && tab !== 'controle' && (
         <div className="filterbar">
           <span className="label">Período</span>
           <div className="chips" role="group" aria-label="Período">
@@ -107,6 +130,7 @@ export default function App() {
         </div>
       )}
 
+      {tab === 'controle' && <Control live={live} user={user} refreshKey={liveTick} />}
       {tab === 'visao' && <Overview live={live} config={config} range={range} refreshKey={liveTick} ws={wsStatus} now={now} />}
       {tab === 'historico' && <History range={stableRange} refreshKey={0} onRefresh={() => setHistoryNonce((n) => n + 1)} />}
       {tab === 'alertas' && <Alerts live={live} range={range} refreshKey={liveTick} />}

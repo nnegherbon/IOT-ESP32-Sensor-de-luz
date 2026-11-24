@@ -8,11 +8,29 @@ export class ApiError extends Error {
   }
 }
 
+const TOKEN_KEY = 'luz_token'
+
+export function getToken(): string | null {
+  return localStorage.getItem(TOKEN_KEY)
+}
+
+export function setToken(token: string | null) {
+  if (token) localStorage.setItem(TOKEN_KEY, token)
+  else localStorage.removeItem(TOKEN_KEY)
+  window.dispatchEvent(new Event('luz-auth'))
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const token = getToken()
   const res = await fetch(path, {
     ...init,
-    headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(init?.headers ?? {}),
+    },
   })
+  if (res.status === 401 && !path.startsWith('/api/auth/login')) setToken(null)
   if (!res.ok) {
     let msg = `${res.status} ${res.statusText}`
     try {
@@ -49,10 +67,10 @@ export const api = {
 }
 
 export function exportUrl(dataset: string, format: 'csv' | 'json', r: Range): string {
-  return `/api/export/${dataset}` + qs({ format, ...rangeParams(r) })
+  return `/api/export/${dataset}` + qs({ format, ...rangeParams(r), token: getToken() })
 }
 
 export function wsUrl(): string {
   const proto = location.protocol === 'https:' ? 'wss' : 'ws'
-  return `${proto}://${location.host}/ws`
+  return `${proto}://${location.host}/ws` + qs({ token: getToken() })
 }

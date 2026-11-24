@@ -1,123 +1,131 @@
 # 🌿 Luz Ambiente: proteção solar automática para plantas sensíveis
 
-Projeto de **Internet das Coisas** com dois **ESP32** comunicando por **MQTT**. Um nó mede a luz que chega à planta;
-o outro sinaliza a situação com LEDs e **fecha uma sombra com um servo** quando o sol fica extremo. Uma dashboard
-web grava todo o histórico e mostra tudo em tempo real.
+**A planta se protege sozinha do sol forte, e você acompanha e comanda pelo celular ou pelo PC.**
+
+Plantas sensíveis (samambaias, orquídeas, mudas, suculentas recém-transplantadas) queimam as folhas quando pegam sol
+direto e intenso. Quem cultiva em casa, na varanda ou numa estufa pequena não fica ao lado delas o dia todo para puxar
+uma sombra na hora certa. O Luz Ambiente mede a luz que chega à planta, decide no servidor quando ela está forte demais,
+fecha uma sombra com um servo, avisa no celular e guarda todo o histórico.
 
 ```
-luz → LDR → ESP32 sensor ──Wi-Fi/MQTT──▶ Mosquitto (Docker, no PC) ──MQTT──▶ ESP32 atuador → 4 LEDs + servo (sombra)
-                                              │
-                                              ▼  assina iot/luzambiente/#
-                               FastAPI + PostgreSQL ──REST/WebSocket──▶ dashboard React
+luz → LDR → ESP32 sensor01 ──MQTT (usuário+senha, ACL)──▶ Mosquitto ◀──▶ backend FastAPI ──▶ PostgreSQL
+                                                              │              │  decide a cena (regra remota)
+                                                              ▼              │  publica o comando com cmd_id
+                                          ESP32 atuador01 ◀───┘              ▼
+                                 4 LEDs + servo (sombra) ── ack/estado ──▶ interface web (login) · notificação ntfy
 ```
 
-## Problema e usuário
+Versão defendida: **release `v3.0-n3`** (branch `SensorDeLuz`). Disciplina de Internet das Coisas, 6ª fase.
 
-Plantas sensíveis (samambaias, orquídeas, mudas, suculentas recém-transplantadas) **queimam as folhas e desidratam**
-quando pegam sol direto e intenso. O **usuário** é quem cultiva essas plantas em casa, na varanda, em horta urbana
-ou estufa pequena e não está ao lado delas o dia todo para puxar uma sombra na hora certa.
+## O que o produto faz
 
-**Proposta de valor:** *a planta se protege sozinha do sol forte e você acompanha pelo celular ou pelo PC*.
-
-## Estado atual (novembro/2026)
-
-Montado e validado em bancada, de ponta a ponta:
-
-| Parte | Como funciona |
+| Para o usuário | Como |
 |---|---|
-| **Nó sensor** (`firmware/n1/Sensor_de_luz`) | lê o LDR no GPIO34 e classifica em 4 cenas: escuro < 150 · ambiente 150–399 · alta 400–999 · extrema ≥ 1000. Publica a **cena** quando ela muda e a **telemetria** (leitura bruta) a cada 2 s, com presença/LWT |
-| **Nó atuador** (`firmware/n1/Atuador_LED`) | acende o LED da cena (escuro → LED 1 · ambiente → LED 2 · alta → LED 3 · extrema → os 4), publica a confirmação retida e a presença/LWT, e move a **sombra**: aberta 15°, fechada 90°, **só na cena extrema** |
-| **Broker** | Mosquitto 2 local, no `docker compose` da dashboard (porta 1883, sem senha) |
-| **Dashboard** (`dashboard-prototipo/`) | FastAPI + PostgreSQL + React: leituras, mín/máx/média, gráfico, transições de cena, confirmações e latência, presença das placas, posição da sombra, alertas, histórico e exportação CSV/JSON. O banco fica num volume Docker e sobrevive a reinícios |
-| **Alimentação** | as duas placas só pelo USB, **sem fonte externa**; o servo usa o VIN (5 V do USB) |
+| A sombra fecha sozinha no sol extremo | o backend classifica a leitura em 4 cenas (com histerese e tempo de confirmação) e comanda o atuador |
+| Ver a luz agora e o histórico | painel com valor atual, gráfico, mín/máx/média, linha do tempo e exportação CSV/JSON |
+| Assumir o controle | aba **Controle**: modo manual por 1/5/15 min, aplicar uma cena, voltar ao automático |
+| Saber que o comando foi cumprido | cada comando mostra o ciclo **enviado → recebido → executado → confirmado** (ou rejeitado com o motivo) |
+| Ser avisado de problemas | alertas na interface e **notificação no celular** (ntfy): sol extremo, sensor com falha, placa offline, modo seguro |
+| Ajustar a regra | limites das cenas, histerese e tempo de confirmação editáveis pela interface (perfil admin) |
 
-Limitações conhecidas:
+## Requisitos da N3 (piso R1–R18)
 
-- Os limites 150/400/1000 ainda **não foram calibrados**: com a luz comum de um quarto o LDR lê ~1.500–1.800, que já é
-  *extrema*.
-- O **servo SG90 queimou** em 22/11/2026 (ver as precauções abaixo). O firmware e a dashboard estão prontos; falta
-  instalar e calibrar o servo novo (MG90S recomendado).
-- O broker não tem usuário/senha, e os ESP32 usam o **IP fixo do PC** (`MQTT_HOST` no `.ino`).
-- O contrato MQTT em uso é o da N1 (`iot/luzambiente/...`). O [contrato v1](contrato/v1/CONTRATO_v1.md), com
-  versionamento, ack por `cmd_id` e modos AUTO/MANUAL/SEGURO, é o alvo da N3.
+| | Requisito | Onde está |
+|---|---|---|
+| R1 | 2 dispositivos, entrada LDR, atuadores LED + servo, alimentação só USB | [`docs/hardware/`](docs/hardware/) (mapa de pinos, esquemas, BOM abaixo) |
+| R2 | leitura não bloqueante e validada, regra local, estado seguro, reconexão, config persistente (NVS), identidade, NTP, logs | [`firmware/n3/`](firmware/n3/) |
+| R3 | contrato MQTT documentado e versionado (v1.1) | [`CONTRATOS.md`](CONTRATOS.md), [`contrato/v1/`](contrato/v1/) |
+| R4 | backend assina, **valida** (descarta e registra inválidas), persiste, expõe API; **único** que publica comandos | [`backend/app/v1.py`](dashboard-prototipo/backend/app/v1.py), [`control.py`](dashboard-prototipo/backend/app/control.py) |
+| R5 | PostgreSQL com histórico de medições e registro de comandos; migrações versionadas | [`migrations/`](dashboard-prototipo/backend/app/migrations/) |
+| R6 | interface com valor atual, histórico, último contato, online/offline, alertas e envio de comando | [`frontend/`](dashboard-prototipo/frontend/) |
+| R7 | ciclo enviado/recebido/executado/confirmado, rejeição com motivo, retransmissão, idempotência | [`CONTRATOS.md` §4](CONTRATOS.md) |
+| R8 | regra remota no backend com parâmetros persistidos e editáveis | tabela `decision_config`, aba Controle |
+| R9 | login (token assinado); credenciais em `.env` e `secrets.h`, fora do Git | [`auth.py`](dashboard-prototipo/backend/app/auth.py) |
+| R10 | 4 falhas testadas com evidência | [`docs/FALHAS.md`](docs/FALHAS.md) |
+| R11 | este README, `.env.example`, release identificada | — |
+| R12 | `docker compose up` sobe broker, banco, backend e interface | [`docker-compose.yml`](dashboard-prototipo/docker-compose.yml) |
+| R13 | `sensor01` e `atuador01` físicos, cada um com deviceId e usuário MQTT próprios | — |
+| R14 | painel analítico: gráfico por período, mín/máx/média, distribuição por cena, latência | aba Visão geral / Histórico |
+| R15 | notificação externa por ntfy (ou Telegram) | [`notify.py`](dashboard-prototipo/backend/app/notify.py) |
+| R16 | perfis **admin** (comanda) e **operador** (só visualiza), com recusa real na API | [`auth.py`](dashboard-prototipo/backend/app/auth.py) |
+| R17 | OTA (ArduinoOTA com senha) demonstrado | [`evidencias/r17_ota_sensor.txt`](docs/evidencias/r17_ota_sensor.txt) |
+| R18 | 59 testes automatizados (pytest + PostgreSQL) e CI no GitHub Actions | [`.github/workflows/ci.yml`](.github/workflows/ci.yml) |
 
 ## Como rodar
 
-**1. Broker + dashboard** (pré-requisito: Docker com Compose):
+### 1. Broker, banco, backend e interface (Docker)
+
+Pré-requisito: Docker com Compose. No Windows, libere a porta **1883** no firewall para os ESP32 alcançarem o broker.
 
 ```bash
 cd dashboard-prototipo
-cp .env.example .env          # defina ao menos POSTGRES_PASSWORD
-docker compose up -d --build  # sobe mosquitto, db, backend e frontend
+cp .env.example .env
+# edite o .env: POSTGRES_PASSWORD, MQTT_PASS_* (uma senha por dispositivo), MQTT_PASSWORD = MQTT_PASS_BACKEND,
+# AUTH_USERS (admin e operador), AUTH_SECRET (openssl rand -hex 32), NTFY_URL (opcional)
+docker compose up -d --build
 ```
 
-Painel em <http://localhost:8080> (porta `HTTP_PORT` do `.env`). Detalhes em
-[`dashboard-prototipo/README.md`](dashboard-prototipo/README.md).
+Interface em `http://localhost:<HTTP_PORT>` (padrão 8081). Entre com um usuário de `AUTH_USERS`.
+Testes do backend: `docker compose exec backend sh -c "pip install -r requirements-dev.txt && pytest"` com
+`TEST_DATABASE_URL`, ou deixe o CI rodar a cada push.
 
-**2. Firmwares** (Arduino IDE 2 com o core **esp32 da Espressif**, placa *ESP32 Dev Module*, e as bibliotecas
-**PubSubClient** e **ArduinoJson**). Em cada `.ino` de `firmware/n1/`, preencha:
+### 2. Firmwares (Arduino IDE 2 ou arduino-cli)
 
-- `WIFI_SSID` / `WIFI_PASSWORD`: a rede Wi-Fi (**nunca faça commit desses valores**);
-- `MQTT_HOST`: o IP do PC que roda o Docker na rede Wi-Fi. Nunca use `localhost`: para o ESP32, esse é ele mesmo.
+- Core **esp32 by Espressif Systems** (placa *ESP32 Dev Module*), bibliotecas **PubSubClient 2.8** e **ArduinoJson 7**.
+- Placas com conversor CP2102 precisam do driver **CP210x** da Silicon Labs e de um cabo USB **de dados**.
+- Em `firmware/n3/Sensor_v1` e `firmware/n3/Atuador_v1`: copie `secrets.example.h` para `secrets.h` e preencha Wi-Fi,
+  IP do PC (`MQTT_HOST`), a senha MQTT do dispositivo e a senha do OTA. **`secrets.h` nunca vai para o Git.**
+- Identifique a placa antes de gravar (Monitor Serial a 115200): o sensor imprime `Luz: N`, o atuador imprime o modo.
+- Wi-Fi e broker podem ser trocados depois pelo Serial, sem regravar: `wifi <ssid> <senha>`, `host <ip>`, `show`.
 
-Com as duas placas no USB, **confirme pelo Monitor Serial (115200) qual porta COM é qual** antes de gravar: o sensor
-imprime `Luz: N`, e o atuador fica quieto até receber uma cena.
+Atualização pela rede (OTA), depois da primeira gravação por USB:
+
+```bash
+arduino-cli upload -p <ip-da-placa> --protocol network --fqbn esp32:esp32:esp32 \
+  --upload-field password=<OTA_PASS> firmware/n3/Sensor_v1
+```
+
+No Windows, permita o `espota.exe` no firewall (entrada), senão o upload para em "No response from device".
 
 ## Hardware
 
-![Esquema do nó sensor](docs/hardware/esquema_eletrico/esquema_sensor.png)
+| Nó | Ligações |
+|---|---|
+| `sensor01` | 3V3 → LDR GL5528 → GPIO34 → 10 kΩ → GND · LED azul da placa (GPIO2) = regra local |
+| `atuador01` | GPIO27/26/25/33 → 330 Ω → LED → GND · servo: sinal GPIO18, + VIN (5 V do USB), − GND |
 
+![Esquema do nó sensor](docs/hardware/esquema_eletrico/esquema_sensor.png)
 ![Esquema do nó atuador](docs/hardware/esquema_eletrico/esquema_atuador.png)
 
-Pinagem completa e pinos evitados: [mapa de pinos](docs/hardware/mapa_de_pinos.md).
+**BOM:** 2× ESP32 DevKit V1 (WROOM-32, CP2102) · 1× LDR GL5528 · 1× resistor 10 kΩ · 4× LED 5 mm + 4× 330 Ω ·
+1× servo SG90/MG90S · protoboard 830 · jumpers · capacitor 100 µF (opcional, VIN–GND junto ao servo) · 2 cabos USB de dados.
 
-## ⚠️ Precauções de hardware
+Precauções: nenhum sinal de 5 V num GPIO; LDR só no ADC1 (o ADC2 não lê com Wi-Fi); servo com braço leve, faixa
+15°–165° e **motor solto após cada movimento** (um SG90 queimou em 22/11 ao ficar travado na ponta com PWM ligado).
+Detalhes em [`docs/hardware/mapa_de_pinos.md`](docs/hardware/mapa_de_pinos.md).
 
-- O ESP32 trabalha com **3,3 V**: nenhum sinal de 5 V vai direto a um GPIO.
-- **LDR só em pinos do ADC1** (GPIO 32–39); o ADC2 não lê com o Wi-Fi ligado. O LDR precisa de um resistor de 10 kΩ
-  formando divisor e precisa **enxergar a luz**: dentro de uma caixa fechada ele lê escuro.
-- **Todo LED com resistor em série** (330 Ω); nenhuma carga alimentada por GPIO.
-- **Servo pelo VIN, sem fonte externa**, por isso: carga leve, ângulos com folga dos batentes e **PWM desligado depois
-  de cada movimento**. O SG90 queimou ao ficar ~3 min travado segurando a ponta (0°), com o braço sem parafuso. Se o
-  servo zumbir sem girar ou esquentar, desligue.
-- Placas com conversor USB **CP2102** precisam do driver da Silicon Labs no Windows para a porta COM aparecer. Use um
-  cabo USB **de dados** (cabos só de carga não aparecem como porta).
-
-## Documentação e diagramas
-
-| Item | Conteúdo |
-|---|---|
-| [mapa de pinos](docs/hardware/mapa_de_pinos.md) | pinagem dos dois nós, alimentação do servo, pinos evitados |
-| [esquemas elétricos](docs/hardware/esquema_eletrico/) | `esquema.py` (schemdraw) gera os `.svg`/`.png` |
-| [arquitetura-alvo](docs/diagramas/arquitetura.svg) | visão N3 (contrato v1, TLS, login) |
-| [fluxo do comando](docs/diagramas/fluxo_comando.png) · [fluxograma do atuador](docs/diagramas/fluxograma_atuador.png) | desenho N3 com AUTO/MANUAL/SEGURO |
-| [contrato v1](contrato/v1/CONTRATO_v1.md) | contrato MQTT congelado: schemas e exemplos (`validar.py`) |
-| [dashboard](dashboard-prototipo/README.md) | instalação, banco, API, alertas, testes |
-
-## Estrutura do repositório
+## Estrutura
 
 ```text
-├── firmware/n1/                  firmwares em uso (Sensor_de_luz, Atuador_LED) — Arduino IDE
-├── dashboard-prototipo/          broker Mosquitto + backend FastAPI + PostgreSQL + frontend React (docker compose)
-├── docs/
-│   ├── hardware/                 mapa de pinos e esquemas elétricos
-│   └── diagramas/                arquitetura, fluxos e fluxograma (.mmd fonte + .svg/.png)
-├── contrato/v1/                  contrato MQTT v1 (alvo da N3)
-└── (legado) backend/, firmware/esp32_*, docs/*.md, IOT-ESP32-Sensor-de-luz
-                                  versão anterior, de outro escopo (som/presença, 1 LED no GPIO13).
-                                  Não usar a pinagem nem as instruções dela.
+├── CONTRATOS.md                 contrato MQTT v1.1 (R3)
+├── firmware/n3/                 firmwares da N3: Sensor_v1, Atuador_v1 (+ secrets.example.h)
+├── firmware/n1/                 firmwares da N1 (histórico; não usam o contrato v1)
+├── firmware/testes/Teste_Servo  teste e calibração do servo pelo Serial
+├── dashboard-prototipo/         docker compose: Mosquitto (senha + ACL), PostgreSQL, backend FastAPI, frontend React
+├── contrato/v1/                 schemas JSON e exemplos do contrato (validar.py)
+├── docs/FALHAS.md               cenários de falha (R10) · docs/evidencias/ registros brutos
+├── docs/hardware/               mapa de pinos e esquemas elétricos
+└── (legado) backend/, firmware/esp32_*, docs/*.md antigos   outro escopo (som/presença); não usar
 ```
 
-## Como reproduzir os artefatos
+## Reaproveitamento e autoria
 
-```bash
-pip install jsonschema schemdraw matplotlib
-npm install -g @mermaid-js/mermaid-cli
-
-python contrato/v1/validar.py                         # valida os exemplos do contrato v1
-python docs/hardware/esquema_eletrico/esquema.py      # redesenha os esquemas elétricos
-for f in docs/diagramas/*.mmd; do mmdc -i "$f" -o "${f%.mmd}.png" -b white -s 2; mmdc -i "$f" -o "${f%.mmd}.svg" -b white; done
-```
+- Estrutura geral inspirada no projeto de referência **Sala Inteligente** da disciplina (broker + backend + banco +
+  interface), com modelo de dados, regra, contrato e interface próprios do problema da planta.
+- Bibliotecas: PubSubClient, ArduinoJson, ArduinoOTA e Preferences (firmware); FastAPI, asyncpg, aiomqtt, httpx
+  (backend); React, Recharts e Vite (interface); Mosquitto e PostgreSQL (infraestrutura).
+- Partes do código e da documentação foram escritas com auxílio de IA (Claude) e revisadas pela equipe; cada integrante
+  explica as partes que usa na validação individual.
 
 ## 👥 Equipe
 
@@ -125,10 +133,8 @@ for f in docs/diagramas/*.mmd; do mmdc -i "$f" -o "${f%.mmd}.png" -b white -s 2;
 |---|---|
 | Ruan Pablo de Lima Pereira | nó sensor: divisor/ADC, fluxograma do sensor e fluxo do dado, parâmetros de decisão |
 | Rodrigo Bonifácio Conceição | nó atuador: máquina de estados, intertravamento, servo |
-| Vinicius Clemente Negherbon | contrato MQTT v1, repositório |
+| Vinicius Clemente Negherbon | contrato MQTT v1, repositório, integração da N3 |
 | Bianca Barp | esquema elétrico, BOM, mapa de pinos, revisão do documento |
 | Guilherme Pietro | arquitetura-alvo, fluxo do comando, protótipo do dashboard, plano de falhas, cronograma e riscos |
-
-## 📄 Licença
 
 Projeto acadêmico, sem licença de software definida.

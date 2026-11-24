@@ -1,0 +1,78 @@
+# Integração contínua (R18): a cada push e pull request roda os testes do backend
+# (validação do contrato, regra de decisão, ciclo do comando, login) contra um PostgreSQL real,
+# valida os exemplos do contrato v1 e compila os dois firmwares da N3.
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: luz
+          POSTGRES_PASSWORD: luz
+          POSTGRES_DB: luz_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U luz -d luz_test" --health-interval 5s --health-timeout 3s --health-retries 20
+    defaults:
+      run:
+        working-directory: dashboard-prototipo/backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: dashboard-prototipo/backend/requirements*.txt
+      - run: pip install -r requirements-dev.txt
+      - run: python -m pytest -v
+        env:
+          TEST_DATABASE_URL: postgresql://luz:luz@localhost:5432/luz_test
+
+  contrato:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install jsonschema
+      - run: python contrato/v1/validar.py
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: dashboard-prototipo/frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: dashboard-prototipo/frontend/package-lock.json
+      - run: npm ci
+      - run: npm run build
+
+  firmware:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: arduino/setup-arduino-cli@v2
+      - name: Core ESP32 e bibliotecas
+        run: |
+          arduino-cli core update-index --additional-urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
+          arduino-cli core install esp32:esp32 --additional-urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
+          arduino-cli lib install "ArduinoJson@7.4.3" "PubSubClient@2.8.0"
+      - name: Compila sensor e atuador (secrets.h de exemplo)
+        run: |
+          for s in Sensor_v1 Atuador_v1; do
+            cp firmware/n3/$s/secrets.example.h firmware/n3/$s/secrets.h
+            arduino-cli compile --fqbn esp32:esp32:esp32 firmware/n3/$s
+          done

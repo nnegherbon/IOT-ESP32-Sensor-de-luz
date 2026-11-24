@@ -14,7 +14,7 @@ export function System({ config, live }: { config: AppConfig; live: LiveState })
             <dt>Broker</dt><dd className="mono">{config.demo ? 'não usado (modo demonstração)' : `${config.mqtt.host}:${config.mqtt.port}${config.mqtt.tls ? ' (TLS)' : ''}`}</dd>
             <dt>Autenticação</dt><dd>{config.mqtt.auth ? 'configurada no backend' : 'nenhuma (broker local na rede)'}</dd>
             <dt>Assinatura</dt><dd className="mono">{config.mqtt.subscription}</dd>
-            <dt>Modo</dt><dd>somente leitura — o backend nunca publica</dd>
+            <dt>Modo</dt><dd>contrato v1.1: o backend decide e é o único que publica comandos (<code>luzambiente/v1/atuador/+/comando</code>); os tópicos da N1 continuam assinados só para o histórico</dd>
             <dt>Mensagens recebidas</dt><dd className="num">{fmtNum(live.stats.recebidas)} <span className="muted">desde {fmtDateTime(live.started_at)}</span></dd>
             <dt>Inválidas</dt><dd className="num">{fmtNum(live.stats.invalidas)}</dd>
             <dt>Não tratadas</dt><dd className="num">{fmtNum(live.stats.nao_tratadas)}</dd>

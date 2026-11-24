@@ -12,7 +12,9 @@ MIGRATIONS_DIR = Path(__file__).parent / "migrations"
 
 async def _init_conn(conn: asyncpg.Connection) -> None:
     for t in ("json", "jsonb"):
-        await conn.set_type_codec(t, encoder=json.dumps, decoder=json.loads, schema="pg_catalog")
+        # default=str: datetime e Decimal em contextos JSONB (ex.: alerta de silêncio) viram texto ISO
+        await conn.set_type_codec(t, encoder=lambda v: json.dumps(v, default=str), decoder=json.loads,
+                                  schema="pg_catalog")
 
 
 async def create_pool(dsn: str) -> asyncpg.Pool:

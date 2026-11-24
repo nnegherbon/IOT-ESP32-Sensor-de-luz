@@ -1,5 +1,5 @@
 # Sobe broker MQTT (Mosquitto) + PostgreSQL + backend (assinante MQTT/API/WebSocket) + frontend (nginx).
-# Uso: cp .env.example .env && docker compose up -d --build  → http://localhost:8080
+# Uso: cp .env.example .env (preencha as senhas) && docker compose up -d --build  → http://localhost:${HTTP_PORT}
 # Os ESP32 publicam no IP deste computador, porta 1883 (libere a porta no firewall do Windows).
 services:
   mosquitto:
@@ -7,8 +7,18 @@ services:
     restart: unless-stopped
     ports:
       - "${MQTT_PUBLIC_PORT:-1883}:1883"
+    env_file: .env
+    # Gera o arquivo de senhas a partir do .env (nenhuma senha fica versionada) e sobe o broker
+    command: >
+      sh -c 'rm -f /mosquitto/data/passwd && touch /mosquitto/data/passwd &&
+      mosquitto_passwd -b /mosquitto/data/passwd backend "$$MQTT_PASS_BACKEND" &&
+      mosquitto_passwd -b /mosquitto/data/passwd sensor01 "$$MQTT_PASS_SENSOR01" &&
+      mosquitto_passwd -b /mosquitto/data/passwd atuador01 "$$MQTT_PASS_ATUADOR01" &&
+      chown mosquitto:mosquitto /mosquitto/data/passwd && chmod 0700 /mosquitto/data/passwd &&
+      exec /usr/sbin/mosquitto -c /mosquitto/config/mosquitto.conf'
     volumes:
       - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - ./mosquitto/acl:/mosquitto/config/acl:ro
       - mosquitto-data:/mosquitto/data
 
   db:

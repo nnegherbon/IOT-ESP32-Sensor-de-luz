@@ -16,9 +16,9 @@ from pathlib import Path
 from jsonschema import Draft202012Validator, FormatChecker
 
 BASE = Path(__file__).resolve().parent
-LEDS_POR_CENA = {
-    "escuro": [False, True, False, False],   # LED 2 (GPIO26)
-    "ambiente": [True, False, False, False],  # LED 1 (GPIO27)
+LEDS_POR_CENA = {  # mapeamento revisado em 11/2026 (CONTRATO_v1.md §2.5)
+    "escuro": [True, False, False, False],    # LED 1 (GPIO27)
+    "ambiente": [False, True, False, False],  # LED 2 (GPIO26)
     "alta": [False, False, True, False],      # LED 3 (GPIO25)
     "extrema": [True, True, True, True],      # os 4 LEDs (comportamento herdado da N1)
 }

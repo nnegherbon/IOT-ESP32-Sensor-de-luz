@@ -238,3 +238,22 @@ td.payload { font-family: var(--mono); font-size: 12px; color: var(--text-second
 .pill.good { color: #49c449; }
 .pill.warn { color: var(--warning); }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+
+/* ------------------------------------------------------------- N3: login e controle */
+.banner.ok { background: rgba(12, 163, 12, 0.1); border: 1px solid rgba(12, 163, 12, 0.45); }
+.login-wrap { min-height: 100vh; display: grid; place-items: center; padding: 20px; }
+.login { width: min(380px, 100%); display: grid; gap: 12px; padding: 28px; }
+.login h1 { font-size: 22px; margin: 0; }
+.field { display: grid; gap: 4px; font-size: 13px; color: var(--text-secondary); }
+.field input, .field select, select {
+  background: var(--surface-2); color: var(--text-primary); border: 1px solid var(--border-strong);
+  border-radius: 6px; padding: 7px 9px; font: inherit; font-size: 14px;
+}
+.form-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px; }
+.big-value { font-size: 44px; font-weight: 600; line-height: 1.1; }
+.stepper { display: inline-flex; gap: 3px; flex-wrap: wrap; }
+.stepper .step { font-size: 11px; padding: 2px 6px; border-radius: 4px; background: var(--surface-3); color: var(--text-muted); }
+.stepper .step.on { background: rgba(12, 163, 12, 0.22); color: #7fd67f; }
+.mini-led { font-size: 11px; padding: 3px 7px; border-radius: 10px; border: 1px solid var(--border-strong); color: var(--text-muted); }
+.mini-led.on { background: var(--led-on); color: #21211f; border-color: var(--led-on); font-weight: 600; }
+.userbox { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-secondary); }

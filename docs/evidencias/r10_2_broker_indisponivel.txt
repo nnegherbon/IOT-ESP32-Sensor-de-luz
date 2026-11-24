@@ -1,0 +1,49 @@
+# R10.2 Broker indisponível: docker compose stop mosquitto às 11:55:59, start 45 s depois
+start às 11:56:47
+2026-11-24 14:56:01,205 ERROR mqtt: failed to receive on socket: [Errno 104] Connection reset by peer
+2026-11-24 14:56:01,221 WARNING app.alerts: ALERTA aberto [critico] atuador anunciou offline (LWT)
+2026-11-24 14:56:01,899 WARNING app.mqtt_client: MQTT desconectado: Disconnected during message iteration (nova tentativa em 1s)
+2026-11-24 14:56:01,909 WARNING app.alerts: ALERTA aberto [critico] Backend sem conexão com o broker: Disconnected during message iteration
+2026-11-24 14:56:11,428 WARNING app.mqtt_client: MQTT desconectado: [Errno -2] Name or service not known (nova tentativa em 2s)
+2026-11-24 14:56:12,183 WARNING app.alerts: ALERTA aberto [aviso] Nenhuma mensagem do sensor há mais de 10s
+2026-11-24 14:56:21,429 WARNING app.mqtt_client: MQTT desconectado: [Errno -2] Name or service not known (nova tentativa em 4s)
+2026-11-24 14:56:33,393 WARNING app.mqtt_client: MQTT desconectado: [Errno -2] Name or service not known (nova tentativa em 8s)
+2026-11-24 14:56:49,395 WARNING app.mqtt_client: MQTT desconectado: [Errno -2] Name or service not known (nova tentativa em 16s)
+2026-11-24 14:57:05,422 INFO app.mqtt_client: MQTT conectado a mosquitto:1883 (client_id=luz-dashboard-58292432, assinatura=iot/luzambiente/#)
+2026-11-24 14:57:07,266 WARNING app.alerts: ALERTA aberto [critico] Atuador atuador01 em modo SEGURO (backend_offline)
+2026-11-24 14:57:09,505 INFO app.control: comando c-20261124-000006 aplicar/alta por regra:cena_por_luminosidade: enviado
+2026-11-24 14:57:13,328 WARNING app.control: comando c-20261124-000006 sem ack em 3s: retransmitido (ok)
+   hora   | component |    event     
+----------+-----------+--------------
+ 11:56:01 | atuador   | offline
+ 11:56:01 | sensor    | offline
+ 11:56:01 | broker    | desconectado
+ 11:56:12 | sensor    | silencio
+ 11:57:05 | broker    | conectado
+ 11:57:05 | atuador   | offline
+ 11:57:05 | sensor    | online
+ 11:57:05 | sensor    | retomado
+ 11:57:07 | atuador   | online
+(9 rows)
+
+   hora   |  modo  | cena |  motivo_seguro  
+----------+--------+------+-----------------
+ 11:55:58 | auto   | alta | 
+ 11:57:05 | auto   | alta | 
+ 11:57:07 | seguro |      | backend_offline
+ 11:57:09 | auto   |      | 
+ 11:57:14 | auto   | alta | 
+(5 rows)
+
+   hora   | channel | ok |                                 message                                 
+----------+---------+----+-------------------------------------------------------------------------
+ 11:56:01 | ntfy    | t  | atuador anunciou offline (LWT)
+ 11:56:02 | ntfy    | t  | Backend sem conexão com o broker: Disconnected during message iteration
+ 11:57:07 | ntfy    | t  | Atuador atuador01 em modo SEGURO (backend_offline)
+(3 rows)
+
+      cmd_id       | cena |   status   | latency_ms 
+-------------------+------+------------+------------
+ c-20261124-000006 | alta | confirmado |       4878
+(1 row)
+

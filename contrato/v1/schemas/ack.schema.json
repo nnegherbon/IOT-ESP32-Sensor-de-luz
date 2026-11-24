@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/nnegherbon/IOT-ESP32-Sensor-de-luz/contrato/v1/ack.schema.json",
   "title": "ack",
-  "description": "luzambiente/v1/atuador/<id>/ack — QoS 1, não retido, resposta a TODO comando recebido.",
+  "description": "luzambiente/v1/atuador/<id>/ack — QoS 1, não retido. v1.1: 'recebido' ao aceitar o JSON, depois 'executado' ou 'rejeitado'.",
   "type": "object",
   "properties": {
     "v": {
@@ -21,6 +21,7 @@
     },
     "resultado": {
       "enum": [
+        "recebido",
         "executado",
         "rejeitado"
       ]
@@ -57,7 +58,10 @@
       "if": {
         "properties": {
           "resultado": {
-            "const": "executado"
+            "enum": [
+              "recebido",
+              "executado"
+            ]
           }
         }
       },

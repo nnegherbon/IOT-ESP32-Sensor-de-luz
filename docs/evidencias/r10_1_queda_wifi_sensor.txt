@@ -1,0 +1,68 @@
+﻿# R10.1 Queda do Wi-Fi do sensor (24/11/2026 11:55): comando 'wifioff 45' no Serial do sensor01
+
+## Serial do sensor01
+[   93061] TESTE DE FALHA: Wi-Fi desligado por 45 s (a regra local continua)
+[   94148] Luz: 511 ok seq=46 (sem broker: s?? regra local)
+[   96148] Luz: 503 ok seq=47 (sem broker: s?? regra local)
+[   98148] Luz: 504 ok seq=48 (sem broker: s?? regra local)
+[  100148] Luz: 507 ok seq=49 (sem broker: s?? regra local)
+[  102148] Luz: 507 ok seq=50 (sem broker: s?? regra local)
+[  104148] Luz: 508 ok seq=51 (sem broker: s?? regra local)
+[  106148] Luz: 511 ok seq=52 (sem broker: s?? regra local)
+[  108148] Luz: 510 ok seq=53 (sem broker: s?? regra local)
+[  110148] Luz: 506 ok seq=54 (sem broker: s?? regra local)
+[  112148] Luz: 503 ok seq=55 (sem broker: s?? regra local)
+[  114148] Luz: 506 ok seq=56 (sem broker: s?? regra local)
+
+## Serial do atuador01
+[  728444] sensor OFFLINE
+(a captura do Serial do atuador saiu truncada; a entrada em modo SEGURO às 11:54:34 está na tabela actuator_states abaixo)
+   hora   | component |  event   |      fonte      
+----------+-----------+----------+-----------------
+ 11:52:40 | sensor    | online   | status v1 / LWT
+ 11:52:40 | sensor    | retomado | 
+ 11:54:21 | sensor    | silencio | 
+ 11:54:33 | sensor    | offline  | status v1 / LWT
+ 11:54:33 | sensor    | retomado | 
+ 11:54:44 | sensor    | silencio | 
+ 11:54:58 | sensor    | online   | status v1 / LWT
+ 11:54:58 | sensor    | retomado | 
+(8 rows)
+
+   hora   |  modo  | cena | motivo_seguro  
+----------+--------+------+----------------
+ 11:51:57 | seguro |      | boot
+ 11:52:27 | seguro |      | boot
+ 11:52:45 | auto   |      | 
+ 11:52:46 | auto   | alta | 
+ 11:53:15 | auto   | alta | 
+ 11:53:42 | manual | alta | 
+ 11:53:50 | auto   | alta | 
+ 11:54:21 | auto   | alta | 
+ 11:54:34 | seguro |      | sensor_offline
+ 11:54:58 | auto   |      | 
+ 11:54:58 | auto   | alta | 
+ 11:55:28 | auto   | alta | 
+(12 rows)
+
+  aberto  | fechado  |                          message                           
+----------+----------+------------------------------------------------------------
+ 11:53:38 | 11:53:42 | Comando c-20261124-000002 não executado: modo_incompativel
+ 11:54:21 | 11:54:33 | Nenhuma mensagem do sensor há mais de 10s
+ 11:54:33 | 11:54:58 | sensor anunciou offline (LWT)
+ 11:54:34 | 11:54:58 | Atuador atuador01 em modo SEGURO (sensor_offline)
+ 11:54:44 | 11:54:58 | Nenhuma mensagem do sensor há mais de 10s
+(5 rows)
+
+   hora   | channel | ok |                      message                      
+----------+---------+----+---------------------------------------------------
+ 11:54:34 | ntfy    | t  | sensor anunciou offline (LWT)
+ 11:54:35 | ntfy    | t  | Atuador atuador01 em modo SEGURO (sensor_offline)
+(2 rows)
+
+      cmd_id       | cena |   status   | latency_ms |   hora   
+-------------------+------+------------+------------+----------
+ c-20261124-000001 | alta | confirmado |        682 | 11:52:45
+ c-20261124-000005 | alta | confirmado |        201 | 11:54:58
+(2 rows)
+

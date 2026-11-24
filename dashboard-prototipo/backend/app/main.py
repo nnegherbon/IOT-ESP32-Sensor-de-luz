@@ -326,7 +326,7 @@ def create_app(settings: Settings | None = None, *, start_background: bool = Tru
         n: Notifier = req.app.state.notifier
         if not n.channels:
             raise HTTPException(409, "nenhum canal configurado (NTFY_URL ou TELEGRAM_* no .env)")
-        return await n.send("Luz Ambiente · teste", f"Notificação de teste enviada por {req.state.user.username}")
+        return await n.send("Luz Ambiente - teste", f"Notificação de teste enviada por {req.state.user.username}")
 
     @app.get("/api/audit")
     async def audit_list(req: Request, limit: int = 50):

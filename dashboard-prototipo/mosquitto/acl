@@ -1,0 +1,19 @@
+# ACL do contrato v1.1 (CONTRATOS.md §4). Um dispositivo só escreve no próprio ramo; só o backend comanda.
+
+user backend
+topic readwrite luzambiente/v1/#
+topic read iot/luzambiente/#
+
+user sensor01
+topic write luzambiente/v1/sensor/sensor01/status
+topic write luzambiente/v1/sensor/sensor01/telemetria
+topic read luzambiente/v1/sensor/sensor01/config
+
+user atuador01
+topic write luzambiente/v1/atuador/atuador01/status
+topic write luzambiente/v1/atuador/atuador01/ack
+topic write luzambiente/v1/atuador/atuador01/estado
+topic read luzambiente/v1/atuador/atuador01/comando
+topic read luzambiente/v1/atuador/atuador01/config
+topic read luzambiente/v1/backend/status
+topic read luzambiente/v1/sensor/+/status

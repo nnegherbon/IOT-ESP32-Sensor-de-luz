@@ -39,7 +39,7 @@ class Notifier:
     async def on_alert(self, alert: dict) -> None:
         if self.is_demo or SEVERITY_ORDER.get(alert["severity"], 0) < self.min_level:
             return
-        title = f"Luz Ambiente · alerta {alert['severity']}"
+        title = f"Luz Ambiente - alerta {alert['severity']}"
         await self.send(title, alert["message"], alert_id=alert["id"],
                         priority="high" if alert["severity"] == "critico" else "default")
 

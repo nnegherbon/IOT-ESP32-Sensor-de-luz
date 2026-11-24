@@ -1,0 +1,41 @@
+# R10.3 Falha de sensor: visão do backend (24/11/2026). Fio do D34 puxado ~12:05:17 e recolocado ~12:05:31
+   hora   | raw  |  ok   |  falha   
+----------+------+-------+----------
+ 12:05:08 | 645  | true  | 
+ 12:05:10 | 534  | true  | 
+ 12:05:12 | 986  | true  | 
+ 12:05:14 | 821  | true  | 
+ 12:05:16 | 215  | true  | 
+ 12:05:18 | 4095 | false | saturado
+ 12:05:20 | 4095 | false | saturado
+ 12:05:22 | 4095 | false | saturado
+ 12:05:24 | 4095 | false | saturado
+ 12:05:26 | 3943 | false | instavel
+ 12:05:28 | 2907 | false | instavel
+ 12:05:30 | 384  | false | instavel
+ 12:05:32 | 3    | true  | 
+ 12:05:34 | 35   | true  | 
+ 12:05:36 | 8    | true  | 
+ 12:05:38 | 1    | true  | 
+(16 rows)
+
+  aberto  | fechado  |                             message                              
+----------+----------+------------------------------------------------------------------
+ 12:05:18 | 12:05:32 | Sensor sensor01 com leitura implausível (saturado, ldr_raw=4095)
+(1 row)
+
+   hora   | channel | ok |                             message                              
+----------+---------+----+------------------------------------------------------------------
+ 12:05:19 | ntfy    | t  | Sensor sensor01 com leitura implausível (saturado, ldr_raw=4095)
+(1 row)
+
+   hora   |      cmd_id       |  cena  |   status   |                       reason                       
+----------+-------------------+--------+------------+----------------------------------------------------
+ 12:05:36 | c-20261124-000010 | escuro | confirmado | leitura 8 → cena escuro (atuador estava em alta)
+ 12:05:50 | c-20261124-000011 | alta   | confirmado | leitura 673 → cena alta (atuador estava em escuro)
+ 12:05:58 | c-20261124-000012 | escuro | confirmado | leitura 0 → cena escuro (atuador estava em alta)
+ 12:06:12 | c-20261124-000013 | alta   | confirmado | leitura 865 → cena alta (atuador estava em escuro)
+(4 rows)
+
+
+Nenhum comando entre 12:05:18 e 12:05:30 (leitura inválida): a regra não decide com dado ruim. Após recolocar o fio, o sistema voltou a comandar sozinho.
