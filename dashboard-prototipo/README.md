@@ -32,7 +32,7 @@ ESP32 Sensor ──MQTT──▶ Mosquitto (docker compose, porta 1883) ──MQ
 | Leitura | `analogRead(34)` — ADC 12 bits, 0–4095, sem calibração para lux |
 | Cenas | `escuro` < 150 · `ambiente` 150–399 · `alta` 400–999 · `extrema` ≥ 1000 |
 | LEDs | escuro → LED 1 (GPIO27) · ambiente → LED 2 (GPIO26) · alta → LED 3 (GPIO25) · **extrema → os 4 LEDs** |
-| Servo (GPIO18) | aberta 15° · fechada 120° · fecha **só na extrema** · PWM desligado após mover (não segura posição) |
+| Servo (GPIO18) | aberta 15° · fechada 90° · fecha **só na extrema** · PWM desligado após mover (não segura posição) |
 
 Tudo isso está centralizado em `backend/app/firmware.py`.
 

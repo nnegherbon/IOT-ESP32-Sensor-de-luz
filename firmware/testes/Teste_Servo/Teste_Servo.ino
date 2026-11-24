@@ -21,13 +21,14 @@ constexpr uint8_t PIN_SERVO        = 18;
 constexpr int SERVO_MIN_GRAUS      = 15;
 constexpr int SERVO_MAX_GRAUS      = 165;
 constexpr int SOMBRA_ABERTA_GRAUS  = 15;
-constexpr int SOMBRA_FECHADA_GRAUS = 120;
+constexpr int SOMBRA_FECHADA_GRAUS = 90; 
 constexpr int PASSO_GRAUS          = 2;
 constexpr int PAUSA_PASSO_MS       = 30;
 constexpr int ESPERA_FINAL_MS      = 400;
 constexpr int ESPERA_BOOT_MS       = 1000;
 
 int posicao = SOMBRA_ABERTA_GRAUS;
+bool servoOk = false; // PWM ligado uma vez no setup e nunca desligado
 
 void escreverServo(int graus) {
   graus = constrain(graus, SERVO_MIN_GRAUS, SERVO_MAX_GRAUS);
@@ -43,16 +44,17 @@ bool ligarServo() {
   return true;
 }
 
+// Solta o motor: duty 0 = pino em LOW, sem pulsos, e o servo não faz força.
+// O PWM continua ligado: ledcDetach + ledcAttach de novo deixava o pino sem sinal
+// (o servo só mexia no primeiro movimento, no boot).
 void soltarServo() {
-  ledcDetach(PIN_SERVO);
-  pinMode(PIN_SERVO, OUTPUT);
-  digitalWrite(PIN_SERVO, LOW);
+  ledcWrite(PIN_SERVO, 0);
 }
 
 void mover(int alvo) {
   alvo = constrain(alvo, SERVO_MIN_GRAUS, SERVO_MAX_GRAUS);
   if (alvo == posicao) { Serial.printf("Ja esta em %d graus\n", posicao); return; }
-  if (!ligarServo()) return;
+  if (!servoOk) { Serial.println("ERRO: PWM do servo nao inicializado"); return; }
   unsigned long t0 = millis();
   int passo = (alvo > posicao) ? PASSO_GRAUS : -PASSO_GRAUS;
   for (int g = posicao; (passo > 0) ? (g < alvo) : (g > alvo); g += passo) {
@@ -70,7 +72,8 @@ void setup() {
   Serial.begin(115200);
   delay(300);
   Serial.println("\nTeste do servo. Indo para ABERTA...");
-  if (ligarServo()) {
+  servoOk = ligarServo();
+  if (servoOk) {
     escreverServo(SOMBRA_ABERTA_GRAUS);
     delay(ESPERA_BOOT_MS);
     soltarServo();
@@ -88,6 +91,16 @@ void loop() {
   if (cmd == "a") mover(SOMBRA_ABERTA_GRAUS);
   else if (cmd == "f") mover(SOMBRA_FECHADA_GRAUS);
   else if (cmd == "p") Serial.printf("Posicao: %d graus\n", posicao);
+  else if (cmd == "t") {
+    // Diagnóstico do pino: TIRE o fio de sinal do servo e ligue um LED com 330 ohms
+    // do D18 ao GND. O LED deve piscar 5x. (Nível alto contínuo não é pulso de servo.)
+    Serial.println("Teste do pino D18: o LED deve piscar 5x");
+    for (int i = 0; i < 5; i++) {
+      ledcWrite(PIN_SERVO, 65535); delay(500);
+      ledcWrite(PIN_SERVO, 0);     delay(500);
+    }
+    Serial.println("Fim do teste do pino");
+  }
   else if (cmd == "v") {
     for (int i = 0; i < 3; i++) {
       mover(SOMBRA_FECHADA_GRAUS); delay(1000);

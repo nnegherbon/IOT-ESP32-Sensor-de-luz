@@ -37,7 +37,7 @@ TOPIC_ACTUATOR_SHADE = f"{TOPIC_BASE}/atuador/sombra"
 SERVO = {
     "gpio": 18,
     "open_deg": 15,           # SOMBRA_ABERTA_GRAUS (posição padrão)
-    "closed_deg": 120,        # SOMBRA_FECHADA_GRAUS
+    "closed_deg": 90,         # SOMBRA_FECHADA_GRAUS
     "closes_on": ["extrema"],  # FECHAR_EM_ALTA = false
     "holds_position": False,  # PWM desligado após cada movimento
     "step_deg": 2, "step_ms": 30,

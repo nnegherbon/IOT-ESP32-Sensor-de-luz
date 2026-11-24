@@ -26,7 +26,7 @@ constexpr int SERVO_MAX_GRAUS      = 165;
 // Ângulos da sombra. Calibre com firmware/testes/Teste_Servo antes de gravar este sketch:
 // encaixe o braço para que ABERTA fique na vertical e FECHADA na horizontal sobre a planta.
 constexpr int SOMBRA_ABERTA_GRAUS  = 15;  // posição padrão: braço na vertical (planta recebe luz)
-constexpr int SOMBRA_FECHADA_GRAUS = 120; // braço na horizontal sobre a planta
+constexpr int SOMBRA_FECHADA_GRAUS = 90;  // braço na horizontal sobre a planta
 constexpr int PASSO_GRAUS          = 2;   // graus por passo do movimento suave
 constexpr int PAUSA_PASSO_MS       = 30;  // pausa entre passos
 constexpr int ESPERA_FINAL_MS      = 400; // tempo para o servo terminar o último passo antes de soltar
@@ -47,6 +47,7 @@ constexpr char TOPICO_SOMBRA[] = BASE "/atuador/sombra";
 
 char cenaAtual[16] = "apagada"; // Guarda o estado atual
 int posicaoServo = SOMBRA_ABERTA_GRAUS; // Último ângulo enviado ao servo
+bool servoOk = false; // PWM do servo ligado no setup
 
 WiFiClient wifiClient;
 PubSubClient mqtt(wifiClient);
@@ -75,12 +76,10 @@ bool ligarServo() {
   return true;
 }
 
-// Solta o motor: sem pulsos o servo não faz força. O pino fica em LOW (e não flutuando),
-// para que ruído no fio não seja lido como pulso e faça o servo tremer.
+// Solta o motor: duty 0 = pino em LOW, sem pulsos, e o servo não faz força.
+// O PWM fica ligado desde o setup (sem ledcDetach/ledcAttach a cada movimento).
 void soltarServo() {
-  ledcDetach(PIN_SERVO);
-  pinMode(PIN_SERVO, OUTPUT);
-  digitalWrite(PIN_SERVO, LOW);
+  ledcWrite(PIN_SERVO, 0);
 }
 
 void publicarSombra() {
@@ -94,7 +93,7 @@ void publicarSombra() {
 void moverSombra(int alvo) {
   alvo = constrain(alvo, SERVO_MIN_GRAUS, SERVO_MAX_GRAUS);
   if (alvo == posicaoServo) return;
-  if (!ligarServo()) return;
+  if (!servoOk) return;
   int passo = (alvo > posicaoServo) ? PASSO_GRAUS : -PASSO_GRAUS;
   for (int g = posicaoServo; (passo > 0) ? (g < alvo) : (g > alvo); g += passo) {
     escreverServo(g);
@@ -202,7 +201,8 @@ void setup() {
   // Começa com a sombra aberta (posição padrão) e solta o motor.
   // A posição real no boot é desconhecida, então o servo vai direto (sem passos): espera o
   // suficiente para ele completar o trajeto. Antes eram 500 ms e o braço às vezes parava no meio.
-  if (ligarServo()) {
+  servoOk = ligarServo();
+  if (servoOk) {
     escreverServo(SOMBRA_ABERTA_GRAUS);
     delay(ESPERA_BOOT_MS);
     soltarServo();
