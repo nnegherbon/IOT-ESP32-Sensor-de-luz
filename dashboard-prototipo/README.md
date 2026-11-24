@@ -1,220 +1,118 @@
-# Luz Ambiente · Dashboard de Telemetria (protótipo)
+# Luz Ambiente · plataforma (broker + backend + banco + interface)
 
-> **Protótipo adiantado** do backend, banco e interface da N3, construído sobre o **contrato da N1**
-> (`iot/luzambiente/...`). Na Unidade 3 ele será migrado ao [contrato v1](../contrato/v1/CONTRATO_v1.md)
-> e ganhará o envio de comandos, o motor de decisão e o login.
-
-Plataforma de telemetria para o projeto [IOT-ESP32-Sensor-de-luz](https://github.com/nnegherbon/IOT-ESP32-Sensor-de-luz):
-sobe o broker Mosquitto local, grava todo o histórico em PostgreSQL e apresenta em tempo real a leitura do LDR, a cena,
-o estado comandado × confirmado do atuador, a posição da sombra, a conectividade dos módulos, estatísticas e alertas.
+Sobe com um único comando o **broker Mosquitto** (com senha e ACL), o **PostgreSQL**, o **backend FastAPI** (que valida,
+grava, **decide e comanda**) e a **interface React** (com login). Contrato em uso: **v1.1** ([`../CONTRATOS.md`](../CONTRATOS.md)).
 
 ```
-ESP32 Sensor ──MQTT──▶ Mosquitto (docker compose, porta 1883) ──MQTT──▶ ESP32 Atuador
-                          │
-                          ▼  (assinatura somente leitura: iot/luzambiente/#)
-                 Backend FastAPI ──▶ PostgreSQL
-                    │  REST + WebSocket
-                    ▼
-                 Frontend React/TS (nginx)
+sensor01 ──telemetria──▶ Mosquitto ──▶ backend: valida → PostgreSQL → regra (cena) → comando com cmd_id ──▶ Mosquitto ──▶ atuador01
+                          (senha + ACL)     ▲                                                               │
+                                            └────────────── ack (recebido/executado/rejeitado) + estado ────┘
+                                    backend ──REST + WebSocket──▶ interface (login, perfis) · alertas ──▶ celular (ntfy)
 ```
 
-## 1. O que foi extraído do firmware
-
-| Item | Valor real no código |
-|---|---|
-| Broker | Mosquitto local (`MQTT_HOST` no `.ino` = IP do PC), porta 1883, sem usuário/senha |
-| Comando (sensor → atuador) | `iot/luzambiente/atuador/luz/comando` · `{"cena":"<cena>"}` · QoS 0, **só quando a cena muda** |
-| Confirmação (atuador) | `iot/luzambiente/atuador/status` · `{"device":"atuador01","estado":"<cena>_executada"}` · **retida** |
-| Telemetria (sensor) | `iot/luzambiente/sensor/telemetria` · `{"device","leitura","cena","uptime_ms"}` a cada 2 s |
-| Presença (LWT, retida) | `iot/luzambiente/sensor/conexao` e `iot/luzambiente/atuador/conexao` · `{"device","status":"online\|offline"}` |
-| Sombra (atuador, retida) | `iot/luzambiente/atuador/sombra` · `{"device":"atuador01","estado":"aberta\|fechada","graus":N}` |
-| Client IDs | `SensorNode01` e `atuador01` |
-| Leitura | `analogRead(34)` — ADC 12 bits, 0–4095, sem calibração para lux |
-| Cenas | `escuro` < 150 · `ambiente` 150–399 · `alta` 400–999 · `extrema` ≥ 1000 |
-| LEDs | escuro → LED 1 (GPIO27) · ambiente → LED 2 (GPIO26) · alta → LED 3 (GPIO25) · **extrema → os 4 LEDs** |
-| Servo (GPIO18) | aberta 15° · fechada 90° · fecha **só na extrema** · PWM desligado após mover (não segura posição) |
-
-Tudo isso está centralizado em `backend/app/firmware.py`.
-
-**Consequências diretas (não contornadas com dados inventados):**
-
-- A **cena** só é publicada na mudança; a leitura bruta vai a cada 2 s. Silêncio de comandos não implica desconexão:
-  a presença vem do LWT.
-- Os payloads não têm horário: o timestamp é o do recebimento no backend.
-- O estado dos LEDs é **derivado** da cena confirmada pela lógica de `onMessage()`, não lido dos pinos.
-- A posição da sombra é a **comandada**: o servo não tem sensor de posição.
-
-### `firmware-patch/` (histórico)
-
-Primeira versão aditiva da telemetria e da presença sobre o firmware da N1. Esse conteúdo já foi incorporado aos
-firmwares em uso, em [`../firmware/n1/`](../firmware/n1/); use aqueles.
-
-## 2. Execução rápida (Docker Compose)
+## 1. Execução (Docker Compose)
 
 ```bash
-cp .env.example .env          # defina ao menos POSTGRES_PASSWORD
+cp .env.example .env      # preencha as senhas (ver seção 3)
 docker compose up -d --build
-# painel:  http://localhost:8080
-# API:     http://localhost:8080/api/health
+# interface: http://localhost:8081   ·   saúde da API: http://localhost:8081/api/health
 ```
 
-Serviços: `mosquitto` (broker MQTT, porta 1883 aberta na rede para os ESP32), `db` (PostgreSQL 16, volume `pgdata`), `backend` (assinante MQTT + API + WebSocket), `frontend` (nginx servindo o SPA
-e fazendo proxy de `/api` e `/ws`). As migrações rodam automaticamente na subida do backend.
+| Serviço | Papel |
+|---|---|
+| `mosquitto` | broker MQTT na porta 1883 (aberta na rede para os ESP32). Sem acesso anônimo: o arquivo de senhas é gerado na subida a partir do `.env`; permissões em [`mosquitto/acl`](mosquitto/acl) |
+| `db` | PostgreSQL 16, volume `pgdata` (sobrevive a reinícios) |
+| `backend` | assinante MQTT, validação, regra de decisão, publicação de comandos, API REST, WebSocket, alertas, notificações |
+| `frontend` | nginx servindo a interface e fazendo proxy de `/api` e `/ws` |
 
-### Modo demonstração
+As migrações rodam sozinhas na subida (`backend/app/migrations/`, controladas por `schema_migrations`).
+Se a interface der 502 depois de recriar o backend: `docker compose restart frontend`.
 
-Se o broker ou os dispositivos não estiverem acessíveis, defina `DEMO_MODE=true` no `.env`. Um gerador local produz mensagens
-**no formato exato do firmware** (incluindo a telemetria e falhas ocasionais de confirmação) pelo mesmo pipeline de ingestão.
-O painel exibe uma faixa "Dados sintéticos", o backend não se conecta ao broker, e os registros ficam com `is_demo=true` —
-nunca se misturam com os reais. Volte para `DEMO_MODE=false` para a integração real.
+## 2. O que o backend faz
 
-## 3. Execução em desenvolvimento (sem Docker)
+| Etapa | Onde |
+|---|---|
+| Valida cada mensagem do contrato v1.1 (versão, device do tópico, faixas, tamanho ≤ 512 B). Inválidas são **descartadas e gravadas** com o motivo | [`app/v1.py`](backend/app/v1.py), tabela `mqtt_messages` |
+| Grava telemetria, presença (status/LWT), acks e estados | [`app/control.py`](backend/app/control.py) |
+| **Regra remota:** classifica a leitura em cena com histerese e tempo de confirmação; em modo AUTO, se a cena do atuador difere, publica `aplicar` | `DecisionEngine`, tabela `decision_config` |
+| **Ciclo do comando:** enviado → recebido → executado → confirmado (ou rejeitado com motivo); retransmite 1× sem ack em 3 s; `sem_confirmacao` e `falha_envio` geram alerta | tabelas `commands`, `command_acks` |
+| Alertas (sol extremo, sensor com falha, placa offline, silêncio, comando falhou, modo seguro, broker caído) e **notificação externa** | [`app/alerts.py`](backend/app/alerts.py), [`app/notify.py`](backend/app/notify.py) |
+| Login (token HMAC) e perfis: `admin` comanda e configura; `operador` só lê (POST/PUT/DELETE → 403) | [`app/auth.py`](backend/app/auth.py), tabela `audit_log` |
 
-```bash
-# Banco
-createuser -P luz && createdb -O luz luz
+Os tópicos da N1 (`iot/luzambiente/...`) continuam assinados **só para o histórico** gravado antes da migração.
 
-# Backend
-cd backend
-python -m venv .venv && . .venv/bin/activate
-pip install -r requirements-dev.txt
-export DATABASE_URL=postgresql://luz:SENHA@localhost:5432/luz
-uvicorn app.main:app --reload --port 8000        # docs em http://localhost:8000/docs
+## 3. Configuração (`.env`)
 
-# Frontend
-cd ../frontend
-npm install
-npm run dev                                       # http://localhost:5173 (proxy para :8000)
-```
-
-### Bancada sem hardware
-
-`scripts/simulate_devices.py` emula **os dois ESP32** (mesmos tópicos, payloads e client IDs) contra um broker local
-(ex.: `docker run -p 1883:1883 eclipse-mosquitto:2 mosquitto -c /mosquitto-no-auth.conf`). Ele se recusa a rodar contra o
-broker público para não interferir nos dispositivos reais.
-
-```bash
-MQTT_HOST=localhost uvicorn app.main:app --port 8000
-python scripts/simulate_devices.py --host localhost --telemetria --perder 0.05
-```
-
-## 4. Configuração (`.env`)
-
-| Variável | Padrão | Descrição |
+| Variável | Exemplo | Descrição |
 |---|---|---|
-| `MQTT_HOST` / `MQTT_PORT` | `mosquitto` / `1883` | broker do compose; fora do Docker, `localhost` |
-| `MQTT_USERNAME` / `MQTT_PASSWORD` / `MQTT_TLS` | vazio / vazio / `false` | para um broker com autenticação (ex.: porta 8883 + TLS) |
-| `HTTP_PORT` | `8080` | porta do painel no PC |
-| `MQTT_SUBSCRIBE` | `iot/luzambiente/#` | tópicos desconhecidos sob a base são guardados como `nao_tratado` |
-| `MQTT_CLIENT_ID_PREFIX` | `luz-dashboard` | sempre recebe sufixo aleatório para não derrubar `SensorNode01`/`atuador01` |
-| `DEMO_MODE` | `false` | dados sintéticos isolados |
-| `CORS_ORIGINS` | localhost | só necessário fora do nginx |
+| `POSTGRES_PASSWORD` | — | senha do banco |
+| `MQTT_PASS_BACKEND`, `MQTT_PASS_SENSOR01`, `MQTT_PASS_ATUADOR01` | — | senhas do broker, uma por cliente (as mesmas vão no `secrets.h` de cada firmware) |
+| `MQTT_USERNAME` / `MQTT_PASSWORD` | `backend` / = `MQTT_PASS_BACKEND` | como o backend entra no broker |
+| `AUTH_USERS` | `admin:<senha>:admin,operador:<senha>:operador` | usuários da interface (R9/R16) |
+| `AUTH_SECRET` | `openssl rand -hex 32` | assina os tokens; sem ele, as sessões caem a cada reinício |
+| `NTFY_URL` | `https://ntfy.sh/<tópico-secreto>` | notificação no celular (app ntfy). Alternativa: `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID` |
+| `NOTIFY_MIN_SEVERITY` | `critico` | gravidade mínima para notificar |
+| `HTTP_PORT` | `8081` | porta da interface no PC |
+| `OTA_PASS` | — | senha do OTA dos firmwares (usada pelo arduino-cli) |
+| `DEMO_MODE` | `false` | dados sintéticos isolados (`is_demo=true`) quando não há hardware |
 
-Credenciais ficam apenas no backend (`.env`, fora do git). O frontend fala só com o backend; `/api/config` informa se há
-autenticação, nunca usuário ou senha. O backend é **somente leitura** no MQTT: não publica em nenhum tópico.
+O `.env` nunca vai para o Git. `/api/config` informa se há autenticação e quais canais de notificação existem, nunca senhas.
 
-## 5. Banco de dados
-
-Esquema em `backend/app/migrations/001_init.sql` (aplicado automaticamente, controlado por `schema_migrations`).
+## 4. Banco de dados
 
 | Tabela | Conteúdo |
 |---|---|
-| `mqtt_messages` | toda mensagem recebida: tópico, payload, QoS, retida, status (`ok`, `invalido`, `nao_tratado`, `erro_processamento`), motivo do erro |
-| `scene_commands` | transições de cena do sensor, cena anterior, status (`aguardando`, `confirmado`, `sem_confirmacao`, `substituido`), latência |
-| `actuator_confirmations` | confirmações do atuador, LEDs derivados, correspondência com o comando, flag de mensagem retida |
-| `sensor_readings` | leituras brutas do LDR (telemetria a cada 2 s) |
-| `connectivity_events` | conexão/desconexão do broker, presença (LWT), falhas de confirmação, silêncio |
-| `alert_rules` / `alerts` | regras configuráveis e histórico de alertas (um aberto por regra) |
-| `devices` | dispositivos vistos e última atividade |
-| `shade_events` | posições da sombra publicadas pelo atuador (`kind='posicao'`, aberta/fechada, graus) |
-| `v_events` (view) | linha do tempo unificada |
+| `sensor_readings` | medições: dispositivo, valor bruto do ADC (0–4095), cena calculada, horário |
+| `commands` | cada comando: `cmd_id`, origem (regra ou usuário), ação, cena/modo, status do ciclo, motivo, horários de envio, recebimento, execução e confirmação, latência, retransmissões, acks duplicados |
+| `command_acks` | todo ack recebido, inclusive repetidos |
+| `actuator_states` | estados publicados: modo, cena, LEDs, sombra, último `cmd_id`, motivo do modo seguro |
+| `decision_config` | parâmetros da regra (limites, histerese, confirmação), quem alterou e quando |
+| `mqtt_messages` | toda mensagem, com `parse_status` (`ok`, `invalido`, …) e o motivo da rejeição |
+| `connectivity_events` | broker conectado/desconectado, online/offline (LWT), silêncio |
+| `alert_rules`, `alerts`, `notifications`, `audit_log` | regras, alertas, notificações enviadas, ações dos usuários |
+| `scene_commands`, `actuator_confirmations`, `shade_events` | visão de transições, confirmações e posição da sombra usada pelos painéis (N1 e v1) |
 
-Todas as tabelas têm `is_demo`, chaves estrangeiras para a mensagem de origem e índices por `(is_demo, tempo)`.
-O estado ao vivo é reconstruído do banco na inicialização, então reinícios não perdem nada.
+Backup: `./scripts/backup.sh` (mantém 30) e `./scripts/restore.sh backups/luz_….dump`.
 
-**Backup e restauração** (com Docker Compose):
+## 5. API
 
-```bash
-./scripts/backup.sh                     # backups/luz_AAAAMMDD_HHMMSS.dump (mantém 30; KEEP=n para mudar)
-./scripts/restore.sh backups/luz_….dump # substitui os dados (pede confirmação)
-```
-
-Fora do Docker: `pg_dump -Fc -d luz > luz.dump` e `pg_restore --clean -d luz luz.dump`. Para agendar, use cron no host
-(ex.: `0 3 * * * /caminho/scripts/backup.sh`).
-
-## 6. Como o comando × confirmação é tratado
-
-1. Comando recebido → `scene_commands.status = aguardando`.
-2. Confirmação **não retida** com a mesma cena (considerando o truncamento de 15 caracteres do atuador) dentro de 5 min →
-   `confirmado`, com latência; comandos anteriores ainda pendentes viram `substituido`.
-3. Se a regra "Atuador não confirmou o comando" estiver ativa com um prazo, comandos vencidos viram `sem_confirmacao`,
-   geram evento de falha e alerta. Uma confirmação tardia ainda casa e encerra o alerta.
-4. Mensagem **retida** entregue na (re)assinatura é gravada como `retido_inicial`: indica o último estado do atuador,
-   mas com horário real desconhecido, e não confirma nenhum comando.
-
-## 7. Alertas
-
-Regras padrão (editáveis na aba **Alertas**):
-
-| Regra | Padrão | Observação |
-|---|---|---|
-| Cena `extrema` | **ativa** | categoria definida pelo próprio firmware |
-| Cena `escuro` | inativa | idem |
-| Leitura bruta acima / abaixo | inativa, limite **vazio** | o projeto não define |
-| Sem mensagens do sensor / atuador | inativa, prazo **vazio** | silêncio pode ser normal (publicação só na mudança) |
-| Atuador não confirmou | inativa, prazo **vazio** | não definido no firmware |
-| Backend desconectado do broker | **ativa** | detecção direta |
-| Dispositivo offline (LWT) | **ativa** | presença publicada pelos dois firmwares |
-
-Regras com limite vazio não podem ser ativadas (a API responde 422). A aba também mostra o histórico de alertas e os
-**períodos de exposição intensa** (trechos contínuos em `alta`/`extrema`).
-
-## 8. API
+Todas as rotas `/api/*` exigem `Authorization: Bearer <token>` (exceto `/api/health` e `/api/auth/login`); o WebSocket
+e as exportações aceitam `?token=`.
 
 | Método | Rota | |
 |---|---|---|
-| GET | `/api/health`, `/api/config`, `/api/state` | saúde, contrato do firmware, estado ao vivo |
-| GET | `/api/readings`, `/api/commands`, `/api/confirmations`, `/api/connectivity`, `/api/messages`, `/api/events`, `/api/alerts` | `from`, `to` (ISO 8601), `limit`, `offset` + filtros |
-| GET | `/api/readings/series` | agregação mín/média/máx por intervalo (`bucket` automático) |
-| GET | `/api/stats` | mín, máx, média, quantidade, taxa de confirmação, latência |
-| GET | `/api/analytics/scenes` | intervalos, distribuição por tempo e períodos intensos |
-| GET/POST/PUT/DELETE | `/api/alert-rules[/{id}]` | regras |
-| POST | `/api/alerts/{id}/ack` | reconhecer alerta |
-| GET | `/api/export/{dataset}?format=csv\|json` | `readings`, `commands`, `confirmations`, `connectivity`, `messages`, `alerts`, `events` (streaming). CSV para Excel pt-BR: `;`, BOM UTF-8, horários de Brasília. JSON: um registro por linha, horários ISO 8601 em UTC |
-| WS | `/ws` | eventos `state`, `command`, `confirmation`, `reading`, `connectivity`, `alert`, `message_invalid` |
+| POST | `/api/auth/login` | `{"username","password"}` → token e perfil |
+| GET | `/api/v1/state` | decisão atual, sensores, atuadores, último comando |
+| GET/POST | `/api/v1/commands` | listar / enviar (`aplicar` + `cena`, ou `definir_modo` + `modo` e `duracao_s`) — admin |
+| GET | `/api/v1/commands/{cmd_id}` | comando com payload e todos os acks |
+| POST | `/api/v1/commands/{cmd_id}/reenviar` | republica o mesmo `cmd_id` (teste de duplicidade) — admin |
+| GET/PUT | `/api/v1/decision` | parâmetros da regra — PUT só admin |
+| POST | `/api/v1/config/{sensor\|atuador}/{device}` | configuração remota persistida na NVS — admin |
+| GET/POST | `/api/v1/notifications`, `/api/v1/notifications/teste` | histórico e teste de notificação |
+| GET | `/api/readings`, `/api/readings/series`, `/api/stats`, `/api/analytics/scenes`, `/api/events`, `/api/messages`, `/api/alerts`, `/api/audit` | histórico e painel analítico (`from`, `to`, `limit`, `offset`) |
+| GET | `/api/export/{dataset}?format=csv\|json` | exportação (CSV para Excel pt-BR) |
+| WS | `/ws?token=` | eventos ao vivo (`state`, `reading`, `v1_command`, `v1_estado`, `alert`, …) |
 
-Período padrão: últimas 24 h.
+Documentação interativa: `http://localhost:8000/docs` quando o backend roda fora do Docker.
 
-## 9. Testes
+## 6. Testes e CI
 
 ```bash
 cd backend
-export TEST_DATABASE_URL=postgresql://luz:SENHA@localhost:5432/luz_test   # banco descartável: o schema é recriado
-pytest -q
+export TEST_DATABASE_URL=postgresql://luz:luz@localhost:5432/luz_test   # banco descartável
+pip install -r requirements-dev.txt && pytest -q
 ```
 
-44 testes cobrem: classificação e mapeamento de LEDs idênticos ao firmware; validação de payloads válidos e inválidos;
-persistência e casamento comando × confirmação; mensagens retidas; comandos substituídos; reconstrução do estado após
-reinício; alertas (cena, limite, prazo de confirmação, broker); isolamento do modo demonstração; consultas por período,
-paginação, estatísticas e análise de cenas; exportação CSV/JSON; WebSocket; e **integração MQTT real** com um broker local
-(amqtt), publicando os payloads do firmware com os client IDs dos dispositivos, incluindo queda do broker e reconexão automática.
+59 testes: contrato v1.1 (payloads válidos e inválidos), regra com histerese, ciclo completo do comando, rejeição com
+motivo, ack duplicado, falha de envio sem broker, falha de sensor, login e perfis, além dos testes da N1 (persistência,
+alertas, exportação, WebSocket e integração MQTT real com broker local). O GitHub Actions
+([`../.github/workflows/ci.yml`](../.github/workflows/ci.yml)) roda os testes com PostgreSQL, valida o contrato e compila
+a interface e os dois firmwares a cada push.
 
-## 10. Limitações e segurança
+## 7. Limitações
 
-- O Mosquitto local não tem usuário nem senha e escuta na rede (porta 1883): qualquer dispositivo da mesma rede pode
-  publicar nesses tópicos. Mensagens fora do formato são registradas como inválidas; mensagens bem formadas de
-  terceiros não são distinguíveis dos dispositivos. Para produção, use usuário/senha e TLS (já suportado por variáveis
-  de ambiente).
-- Os ESP32 usam o IP fixo do PC: se ele mudar (DHCP), as placas param de conectar até o firmware ser regravado.
-- As credenciais de Wi-Fi ficam só na cópia local dos `.ino`; no repositório, são placeholders.
-- A API não tem autenticação; exponha-a apenas em rede confiável ou atrás de um proxy autenticado.
-- Durações de cena assumem que a cena vigente vale até a próxima transição; os períodos com o sensor desligado aparecem
-  pela presença (LWT).
-- Os dados só são coletados enquanto o PC, o Docker e as duas placas estão ligados.
-
-## 11. Servomotor (sombra)
-
-O atuador publica a posição em `iot/luzambiente/atuador/sombra` (retida) ao conectar e após cada movimento. O backend
-grava em `shade_events`, mantém a última posição no estado ao vivo, e a aba **Sistema** mostra a configuração do servo
-(GPIO, ângulos, regra de fechamento, alimentação) e a última posição recebida. O SG90 original queimou; até o servo
-novo (MG90S) ser instalado, a posição continua sendo publicada, mas fisicamente nada se move.
+- MQTT sem TLS (rede local); a segurança avançada (R16) é feita pelos perfis da interface e pela ACL do broker.
+- Leitura em valor bruto do ADC, sem conversão para lux (o kit não tem luxímetro para calibrar).
+- A posição da sombra é a comandada: o servo não informa a posição real.
+- O tópico do ntfy público é protegido só pelo nome secreto.
+- `scripts/simulate_devices.py` emula apenas o contrato da N1.

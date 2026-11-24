@@ -1,7 +1,7 @@
 # Mapa de pinos
 
 Placas: 2× ESP32 DevKit V1 (ESP32-WROOM-32, 30 pinos, conversor USB CP2102). Esquemas em `esquema_eletrico/`.
-Este mapa é o da montagem atual e bate com `firmware/n1/` e com `dashboard-prototipo/backend/app/firmware.py`.
+Este mapa é o da montagem atual e bate com os firmwares da N3 em `firmware/n3/` (Sensor_v1 e Atuador_v1).
 
 ## Nó sensor: `sensor01`
 
@@ -10,6 +10,7 @@ Este mapa é o da montagem atual e bate com `firmware/n1/` e com `dashboard-prot
 | 3V3 | alimentação do divisor | saída de tensão | LDR (lado alto) | o divisor fica limitado a 3,3 V |
 | GPIO34 (D34) | leitura do LDR | entrada analógica | nó Va (entre o LDR e R1 10 kΩ) | ADC1_CH6, só entrada; o ADC1 funciona com Wi-Fi. O VN (GPIO39) fica colado: cuidado |
 | GND | referência | — | R1 | — |
+| GPIO2 | LED azul da própria placa | saída digital | já soldado na placa | **regra local** (funciona sem rede): aceso = luz ≥ `limite_local` (padrão 1000); piscando rápido = leitura inválida (fio solto) |
 | USB | alimentação 5 V | — | carregador/PC | ~80 mA médios, picos de ~240 mA no Wi-Fi |
 
 O LDR precisa ficar **exposto à luz**. Se ele ficar dentro de uma caixa fechada, a leitura cai para a cena escuro.
@@ -26,6 +27,14 @@ O LDR precisa ficar **exposto à luz**. Se ele ficar dentro de uma caixa fechada
 | VIN | +5 V do servo | — | fio vermelho do servo (trilha +) | 5 V vindos do USB |
 | GND | referência comum | — | LEDs, GND do servo (marrom) | — |
 | USB | alimentação 5 V do ESP32 e do servo | — | carregador/PC | sem fonte externa |
+
+### LEDs do atuador por modo
+
+| Situação | LEDs |
+|---|---|
+| cena escuro · ambiente · alta | só o LED 1 · LED 2 · LED 3 |
+| cena extrema | os 4 LEDs, e a sombra fecha |
+| **modo SEGURO** (sem broker, backend ou sensor; também nos primeiros segundos após ligar) | LEDs de cena apagados, **LED 1 piscando a 1 Hz**, servo parado e sem PWM |
 
 ### Servo sem fonte externa
 

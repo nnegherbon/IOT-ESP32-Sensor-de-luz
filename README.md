@@ -87,6 +87,31 @@ arduino-cli upload -p <ip-da-placa> --protocol network --fqbn esp32:esp32:esp32 
 
 No Windows, permita o `espota.exe` no firewall (entrada), senão o upload para em "No response from device".
 
+### Trocar de rede sem regravar (ex.: hotspot do celular)
+
+Conecte o PC na rede nova e anote o IP dele (`ipconfig`). Em cada placa, pelo Monitor Serial (115200, "Nova linha"):
+
+| Comando | Efeito (salvo na NVS, sobrevive ao reinício) |
+|---|---|
+| `wifi <ssid> <senha>` | troca a rede Wi-Fi |
+| `host <ip>` | troca o endereço do broker (IP do PC com o Docker) |
+| `show` | mostra versão, rede, IP, broker e se o MQTT está conectado |
+| `wifioff <s>` | **teste de falha**: desliga o Wi-Fi por *s* segundos |
+| `reset` · `reboot` | apaga a configuração salva · reinicia |
+
+O ESP32 só conecta em 2,4 GHz (no iPhone, ative "Maximizar compatibilidade" no Acesso Pessoal). Se a rede nova for
+marcada como pública, libere a porta 1883 no firewall do Windows.
+
+## O que os LEDs indicam
+
+| Placa | LED | Significado |
+|---|---|---|
+| sensor | azul da placa aceso | luz forte (≥ `limite_local`, padrão 1000): regra local, funciona sem rede |
+| sensor | azul piscando rápido | **falha de sensor** (leitura saturada ou instável, ex.: fio solto) |
+| atuador | só LED 1 · LED 2 · LED 3 | cena escuro · ambiente · alta |
+| atuador | os 4 LEDs | cena extrema (a sombra fecha) |
+| atuador | **LED 1 piscando devagar** | **modo SEGURO**: sem broker, backend ou sensor (normal por alguns segundos após ligar) |
+
 ## Hardware
 
 | Nó | Ligações |
