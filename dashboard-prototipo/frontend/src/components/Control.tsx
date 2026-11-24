@@ -103,13 +103,27 @@ export function Control({ live, user, refreshKey }: { live: LiveState; user: Ses
   const est = act?.estado
   const can = user.can_command
 
+  // O botão do modo só fica "ativo" quando o ATUADOR confirma o modo (estado retido);
+  // até lá o botão clicado mostra "aguardando…". Some sozinho em 8 s se não houver confirmação.
+  const [pendingMode, setPendingMode] = useState<'auto' | 'manual' | null>(null)
+  useEffect(() => {
+    if (pendingMode && est?.modo === pendingMode) setPendingMode(null)
+  }, [est?.modo, pendingMode])
+  useEffect(() => {
+    if (!pendingMode) return
+    const id = window.setTimeout(() => setPendingMode(null), 8000)
+    return () => window.clearTimeout(id)
+  }, [pendingMode])
+
   async function send(body: Record<string, unknown>, label: string) {
     setMsg(null)
     try {
       const c = await api.post<Command>('/api/v1/commands', body)
+      if (c.status === 'falha_envio') setPendingMode(null)
       setMsg({ tone: c.status === 'falha_envio' ? 'critical' : 'good', text: `${label}: comando ${c.cmd_id} ${STATUS_LABEL[c.status]}. Acompanhe o ciclo abaixo.` })
       load()
     } catch (e) {
+      setPendingMode(null)
       setMsg({ tone: 'critical', text: e instanceof Error ? e.message : String(e) })
     }
   }
@@ -190,20 +204,33 @@ export function Control({ live, user, refreshKey }: { live: LiveState; user: Ses
       <Panel title="Comandar a sombra" sub={can ? `logado como ${user.username} (admin)` : 'perfil operador: só visualização'}>
         {!can && <p className="note">Seu perfil é <b>operador</b>: você acompanha tudo, mas comandos e mudanças de regra exigem um usuário <b>admin</b>.</p>}
         <div className="row" style={{ gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
-          <button className="btn primary" disabled={!can} onClick={() => send({ acao: 'definir_modo', modo: 'manual', duracao_s: duracao }, 'Controle manual')}>Assumir controle manual</button>
-          <label className="small">por <select value={duracao} disabled={!can} onChange={(e) => setDuracao(Number(e.target.value))}>
+          <span className="small muted">Modo:</span>
+          <div className="mode-toggle" role="group" aria-label="Modo do atuador">
+            <button className={`btn mode ${est?.modo === 'auto' ? 'active' : ''} ${pendingMode === 'auto' ? 'pending' : ''}`}
+              aria-pressed={est?.modo === 'auto'} disabled={!can || est?.modo === 'seguro'}
+              onClick={() => { setPendingMode('auto'); send({ acao: 'definir_modo', modo: 'auto' }, 'Modo automático') }}>
+              Modo automático{pendingMode === 'auto' ? ' · aguardando…' : ''}
+            </button>
+            <button className={`btn mode ${est?.modo === 'manual' ? 'active' : ''} ${pendingMode === 'manual' ? 'pending' : ''}`}
+              aria-pressed={est?.modo === 'manual'} disabled={!can || est?.modo === 'seguro'}
+              onClick={() => { setPendingMode('manual'); send({ acao: 'definir_modo', modo: 'manual', duracao_s: duracao }, 'Modo manual') }}>
+              Modo manual{pendingMode === 'manual' ? ' · aguardando…' : est?.modo === 'manual' && est.manual_restante_s != null ? ` · ${Math.ceil(est.manual_restante_s / 60)} min` : ''}
+            </button>
+          </div>
+          <label className="small">manual por <select value={duracao} disabled={!can} onChange={(e) => setDuracao(Number(e.target.value))}>
             <option value={60}>1 min</option><option value={300}>5 min</option><option value={900}>15 min</option></select></label>
-          <button className="btn" disabled={!can} onClick={() => send({ acao: 'definir_modo', modo: 'auto' }, 'Automático')}>Voltar ao automático</button>
+          {est?.modo === 'seguro' && <Status tone="critical">modo seguro: o atuador recusa comandos até a conexão voltar</Status>}
         </div>
         <div className="row" style={{ gap: 8, flexWrap: 'wrap', marginTop: 12, alignItems: 'center' }}>
           <span className="small muted">Aplicar cena (no modo manual):</span>
           {SCENES.map((s) => (
-            <button key={s} className="btn" disabled={!can} onClick={() => send({ acao: 'aplicar', cena: s }, `Cena ${s}`)}>
+            <button key={s} className={`btn scene-btn ${est?.cena === s ? 'active' : ''}`} aria-pressed={est?.cena === s} disabled={!can}
+              onClick={() => send({ acao: 'aplicar', cena: s }, `Cena ${s}`)}>
               <SceneBadge cena={s} />{s === 'extrema' ? ' · fecha a sombra' : ''}
             </button>
           ))}
         </div>
-        <p className="note">Em automático o atuador recusa cenas manuais (<code>modo_incompativel</code>); a recusa e o motivo aparecem no ciclo abaixo.</p>
+        <p className="note">O modo e a cena destacados são os que o <b>atuador confirmou</b>. Em automático ele recusa cenas manuais (<code>modo_incompativel</code>); a recusa e o motivo aparecem no ciclo abaixo.</p>
       </Panel>
 
       <Panel title="Ciclo dos comandos" sub="enviado → recebido → executado → confirmado">

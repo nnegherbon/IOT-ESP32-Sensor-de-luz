@@ -257,3 +257,15 @@ td.payload { font-family: var(--mono); font-size: 12px; color: var(--text-second
 .mini-led { font-size: 11px; padding: 3px 7px; border-radius: 10px; border: 1px solid var(--border-strong); color: var(--text-muted); }
 .mini-led.on { background: var(--led-on); color: #21211f; border-color: var(--led-on); font-weight: 600; }
 .userbox { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-secondary); }
+
+/* Botões: resposta ao passar o mouse e ao clicar; modo/cena ativos destacados */
+.btn { transition: background-color .12s, border-color .12s, transform .06s, box-shadow .12s; }
+.btn:not(:disabled):hover { border-color: var(--border-strong); background: var(--surface-3); }
+.btn:not(:disabled):active { transform: translateY(1px) scale(.98); filter: brightness(.9); }
+.btn:focus-visible { outline: 2px solid #6da7ec; outline-offset: 2px; }
+.mode-toggle { display: inline-flex; gap: 0; border-radius: 8px; overflow: hidden; border: 1px solid var(--border-strong); }
+.mode-toggle .btn.mode { border: none; border-radius: 0; min-width: 170px; padding: 8px 14px; }
+.mode-toggle .btn.mode + .btn.mode { border-left: 1px solid var(--border-strong); }
+.btn.mode.active, .btn.scene-btn.active { background: #1c5cab; color: #fff; font-weight: 600; box-shadow: inset 0 0 0 1px #6da7ec; }
+.btn.mode.active:not(:disabled):hover, .btn.scene-btn.active:not(:disabled):hover { background: #2167bd; }
+.btn.mode.pending { background: rgba(250, 178, 25, .14); color: var(--text-primary); }
