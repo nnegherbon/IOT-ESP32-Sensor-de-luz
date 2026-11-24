@@ -15,7 +15,7 @@ const KIND_HELP: Record<string, string> = {
   silence: '',
   confirmation_timeout: 'Tempo máximo entre o comando do sensor e a confirmação do atuador. Não definido no firmware.',
   broker_disconnected: 'Dispara quando o backend perde a conexão com o broker MQTT.',
-  device_offline: 'Dispara quando um dispositivo anuncia offline por LWT. Só funciona com o patch de presença.',
+  device_offline: 'Dispara quando um dispositivo anuncia offline (LWT): o broker avisa sozinho se a placa cair.',
 }
 
 function RuleEditor({ rule, onSaved }: { rule: AlertRule; onSaved: (r: AlertRule) => void }) {

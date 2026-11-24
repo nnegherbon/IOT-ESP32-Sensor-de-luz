@@ -294,11 +294,14 @@ class ControlService:
                     " WHERE cmd_id=$1 RETURNING *", m.ultimo_cmd_id, at, latency)
                 out["confirmed"] = self.command_view(cmd)
                 if cmd["scene_command_id"]:
-                    await c.execute(
-                        "UPDATE scene_commands SET status='confirmado', confirmed_at=$2, latency_ms=$3 WHERE id=$1",
-                        cmd["scene_command_id"], at, latency)
+                    sc = await c.fetchrow(
+                        "UPDATE scene_commands SET status='confirmado', confirmed_at=$2, latency_ms=$3 WHERE id=$1"
+                        " RETURNING *", cmd["scene_command_id"], at, latency)
+                    last = self.t.sensor.get("last_command")
+                    if sc and (not last or last["id"] == sc["id"]):
+                        self.t.sensor["last_command"] = self.t._cmd_view(sc)
         # Visão "confirmada" do painel (LEDs e cena que o atuador declarou)
-        if m.cena is not None and (not prev or prev.get("cena") != m.cena or not retained):
+        if m.cena is not None and (not prev or prev.get("cena") != m.cena or "confirmed" in out):
             did = await self.t._ensure_device(c, "atuador", m.device, at)
             conf = await c.fetchrow(
                 "INSERT INTO actuator_confirmations (message_id, device_id, received_at, estado, cena, known_scene,"
@@ -401,9 +404,11 @@ class ControlService:
                 scene_id = None
                 if acao == "aplicar":
                     prev = (self.actuators.get(device) or {}).get("estado", {}) or {}
-                    scene_id = await c.fetchval(
+                    scene_row = await c.fetchrow(
                         "INSERT INTO scene_commands (message_id, received_at, cena, known_scene, previous_cena, is_demo)"
-                        " VALUES ($1,$2,$3,true,$4,$5) RETURNING id", msg_id, now, cena, prev.get("cena"), self.is_demo)
+                        " VALUES ($1,$2,$3,true,$4,$5) RETURNING *", msg_id, now, cena, prev.get("cena"), self.is_demo)
+                    scene_id = scene_row["id"]
+                    self.t.sensor["last_command"] = self.t._cmd_view(scene_row)
                 row = await c.fetchrow(
                     "INSERT INTO commands (cmd_id, device, origem, acao, cena, sombra, modo, duracao_s, payload,"
                     " requested_by, reason, status, sent_at, scene_command_id, is_demo)"
@@ -478,8 +483,11 @@ class ControlService:
                         " AND status IN ('enviado','recebido','executado') RETURNING *", r["cmd_id"],
                         "sem ack" if r["status"] == "enviado" else "sem estado confirmando")
                     if row and row["scene_command_id"]:
-                        await c.execute("UPDATE scene_commands SET status='sem_confirmacao' WHERE id=$1",
-                                        row["scene_command_id"])
+                        sc = await c.fetchrow("UPDATE scene_commands SET status='sem_confirmacao' WHERE id=$1"
+                                              " RETURNING *", row["scene_command_id"])
+                        last = self.t.sensor.get("last_command")
+                        if sc and last and last["id"] == sc["id"]:
+                            self.t.sensor["last_command"] = self.t._cmd_view(sc)
                 if row:
                     v = self.command_view(row)
                     self.actuators.setdefault(v["device"], {})["last_command"] = v

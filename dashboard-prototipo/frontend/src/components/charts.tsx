@@ -104,8 +104,8 @@ export function SceneDistribution({ analysis }: { analysis: SceneAnalysis | null
           </span>
         </div>
       ))}
-      <p className="note">Tempo calculado entre transições publicadas pelo sensor (ele só publica quando a cena muda).
-        Períodos com o sensor desligado não são distinguíveis sem o patch de presença.</p>
+      <p className="note">Tempo calculado entre as transições de cena decididas pelo backend.
+        Períodos com o sensor desligado aparecem na conectividade (LWT).</p>
     </div>
   )
 }
@@ -178,7 +178,7 @@ export function StateHistoryChart(props: { commands: CommandRow[]; confirmations
   return (
     <>
       <div className="legend" style={{ marginBottom: 6 }}>
-        <span><svg width="18" height="8"><path d="M0 6h7V2h11" fill="none" stroke="var(--series-1)" strokeWidth="2" /></svg>Comandada pelo sensor</span>
+        <span><svg width="18" height="8"><path d="M0 6h7V2h11" fill="none" stroke="var(--series-1)" strokeWidth="2" /></svg>Comandada pelo backend</span>
         <span><svg width="10" height="10"><circle cx="5" cy="5" r="4" fill="var(--series-2)" stroke="var(--surface-1)" strokeWidth="1.5" /></svg>Confirmada pelo atuador</span>
       </div>
       <ResponsiveContainer width="100%" height={200}>

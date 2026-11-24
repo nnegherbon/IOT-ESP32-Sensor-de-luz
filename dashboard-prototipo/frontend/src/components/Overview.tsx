@@ -62,7 +62,7 @@ function LuminosityHero({ live, now }: { live: LiveState; now: number }) {
 function SceneCard({ live, now }: { live: LiveState; now: number }) {
   const c = live.sensor.last_command
   return (
-    <Panel title="Classificação luminosa" sub="cena publicada pelo sensor">
+    <Panel title="Classificação luminosa" sub="cena decidida pelo backend">
       {c ? (
         <>
           <div className="row" style={{ gap: 10 }}>
@@ -125,8 +125,8 @@ function ActuatorCard({ live, config, now }: { live: LiveState; config: AppConfi
         ))}
       </div>
       <p className="note">
-        LEDs derivados da cena confirmada, conforme <code>onMessage()</code> do atuador (na cena extrema os quatro acendem).
-        A confirmação informa a cena executada, não a leitura física dos pinos.
+        LEDs informados pelo atuador no estado confirmado (na cena extrema os quatro acendem).
+        “Comandado” é a última cena enviada pelo backend; “Confirmado” é a que o atuador declarou ter executado.
       </p>
     </Panel>
   )

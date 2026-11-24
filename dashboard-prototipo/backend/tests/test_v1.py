@@ -138,6 +138,10 @@ async def test_regra_gera_comando_e_ciclo_ate_confirmar(service):
         r = await c.fetchrow("SELECT * FROM commands WHERE cmd_id=$1", cid)
     assert r["status"] == "confirmado" and r["received_at"] and r["executed_at"] and r["confirmed_at"]
     assert r["requested_by"] == "regra:cena_por_luminosidade"
+    # o painel de visão geral acompanha o comando v1 e não acusa divergência
+    assert service.sensor["last_command"]["cena"] == "extrema"
+    assert service.sensor["last_command"]["status"] == "confirmado"
+    assert service.sync_state() == "sincronizado"
 
     # ack duplicado (QoS 1 / reenvio) não muda o estado, só é contado
     await service.handle(ack, js({"v": 1, "device": "atuador01", "cmd_id": cid, "resultado": "executado", "motivo": None}))
