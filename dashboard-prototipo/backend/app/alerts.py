@@ -18,7 +18,7 @@ from .hub import Hub
 log = logging.getLogger(__name__)
 
 KINDS = ("scene", "raw_above", "raw_below", "silence", "confirmation_timeout",
-         "broker_disconnected", "device_offline")
+         "broker_disconnected", "device_offline", "sensor_fault", "command_failed", "safe_mode")
 SEVERITIES = ("info", "aviso", "critico")
 
 
@@ -83,6 +83,8 @@ class AlertEngine:
         self.is_demo = is_demo
         self.rules: dict[int, dict] = {}
         self.open: dict[int, dict] = {}  # rule_id -> alerta aberto
+        # Chamado a cada alerta aberto (notificação externa, R15). Recebe o dicionário do alerta.
+        self.on_open = None
 
     async def load(self) -> None:
         async with self.pool.acquire() as c:
@@ -110,6 +112,11 @@ class AlertEngine:
         self.open[rule["id"]] = a
         log.warning("ALERTA aberto [%s] %s", rule["severity"], message)
         await self.hub.broadcast("alert", a)
+        if self.on_open is not None:
+            try:
+                await self.on_open(a)
+            except Exception:  # notificação nunca derruba a ingestão
+                log.exception("falha ao notificar o alerta %s", a["id"])
         return a
 
     async def close_alert(self, rule_id: int, at: datetime | None = None, reason: str | None = None) -> dict | None:
@@ -163,6 +170,22 @@ class AlertEngine:
         for rule in self.enabled("device_offline"):
             await self.set_condition(rule, not online, f"{component} anunciou offline (LWT)",
                                      {"componente": component}, at, f"{component} online")
+
+    async def on_sensor_fault(self, device: str, fault: str | None, raw: int, at: datetime) -> None:
+        for rule in self.enabled("sensor_fault"):
+            await self.set_condition(rule, fault is not None,
+                                     f"Sensor {device} com leitura implausível ({fault}, ldr_raw={raw})",
+                                     {"device": device, "falha": fault, "leitura": raw}, at, "leitura normalizada")
+
+    async def on_command_result(self, cmd_id: str, ok: bool, motivo: str | None, at: datetime) -> None:
+        for rule in self.enabled("command_failed"):
+            await self.set_condition(rule, not ok, f"Comando {cmd_id} não executado: {motivo}",
+                                     {"cmd_id": cmd_id, "motivo": motivo}, at, f"comando {cmd_id} confirmado")
+
+    async def on_safe_mode(self, device: str, active: bool, motivo: str | None, at: datetime) -> None:
+        for rule in self.enabled("safe_mode"):
+            await self.set_condition(rule, active, f"Atuador {device} em modo SEGURO ({motivo or 'sem motivo'})",
+                                     {"device": device, "motivo": motivo}, at, "atuador saiu do modo seguro")
 
     async def check_silence(self, last_seen: dict[str, datetime | None], baseline: datetime,
                             now: datetime) -> list[tuple[dict, bool]]:

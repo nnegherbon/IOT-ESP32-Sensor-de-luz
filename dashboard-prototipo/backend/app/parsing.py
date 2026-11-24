@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 from typing import Any, Union
 
 from . import firmware as fw
+from . import v1
 
 MAX_PAYLOAD_BYTES = 4096
 
@@ -59,6 +60,12 @@ class ShadeMsg:
 
 
 @dataclass
+class V1Msg:
+    """Mensagem do contrato v1.1 (luzambiente/v1/...), já validada por v1.parse."""
+    obj: Any
+
+
+@dataclass
 class UnhandledMsg:
     """Tópico sob a base que o backend ainda não interpreta (ex.: servo futuro)."""
     payload_json: Any | None = None
@@ -70,13 +77,15 @@ class ParseError:
     details: dict = field(default_factory=dict)
 
 
-Parsed = Union[CommandMsg, ConfirmationMsg, TelemetryMsg, ConnectionMsg, ShadeMsg, UnhandledMsg, ParseError]
+Parsed = Union[V1Msg, CommandMsg, ConfirmationMsg, TelemetryMsg, ConnectionMsg, ShadeMsg, UnhandledMsg, ParseError]
 
 KNOWN_TOPICS = (fw.TOPIC_COMMAND, fw.TOPIC_ACTUATOR_STATUS, fw.TOPIC_SENSOR_TELEMETRY,
                 fw.TOPIC_SENSOR_CONNECTION, fw.TOPIC_ACTUATOR_CONNECTION, fw.TOPIC_ACTUATOR_SHADE)
 
 
 def topic_origin(topic: str) -> str:
+    if topic.startswith(v1.PREFIX + "/"):
+        return v1.origin(topic)
     if topic in (fw.TOPIC_COMMAND, fw.TOPIC_SENSOR_TELEMETRY, fw.TOPIC_SENSOR_CONNECTION):
         return "sensor"
     if topic in (fw.TOPIC_ACTUATOR_STATUS, fw.TOPIC_ACTUATOR_CONNECTION, fw.TOPIC_ACTUATOR_SHADE):
@@ -160,6 +169,18 @@ def _parse_shade(data: dict) -> Parsed:
 
 
 def parse(topic: str, payload: bytes) -> Parsed:
+    if topic.startswith(v1.PREFIX + "/"):
+        if payload == b"":
+            return ParseError("payload_vazio")
+        if len(payload) > v1.MAX_PAYLOAD:
+            return ParseError("payload_maior_que_512_bytes", {"bytes": len(payload)})
+        data = _load_object(payload)
+        if isinstance(data, ParseError):
+            return data
+        r = v1.parse(topic, data)
+        if isinstance(r, v1.V1Error):
+            return ParseError(r.reason, r.details)
+        return V1Msg(r)
     if topic not in KNOWN_TOPICS:
         try:
             return UnhandledMsg(json.loads(payload.decode("utf-8")) if payload else None)

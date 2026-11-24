@@ -141,7 +141,9 @@ async def test_api_rules_export_and_websocket(clean_db):
 
             rules = (await http.get("/api/alert-rules")).json()
             silence = next(x for x in rules if x["kind"] == "silence")
-            bad = await http.put(f"/api/alert-rules/{silence['id']}", json={"enabled": True})
+            # A migração 002 já define o limite do silêncio; "raw_above" continua sem limite padrão
+            above = next(x for x in rules if x["kind"] == "raw_above")
+            bad = await http.put(f"/api/alert-rules/{above['id']}", json={"enabled": True})
             assert bad.status_code == 422
             ok = await http.put(f"/api/alert-rules/{silence['id']}",
                                 json={"enabled": True, "params": {"component": "sensor", "seconds": 60}})

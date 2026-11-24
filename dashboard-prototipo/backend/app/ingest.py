@@ -14,6 +14,7 @@ import asyncpg
 
 from . import firmware as fw
 from . import parsing as p
+from . import v1
 from .alerts import AlertEngine
 from .hub import Hub
 
@@ -47,6 +48,7 @@ class TelemetryService:
                                          "presence": None, "shade": None}
         self.last_message_at: datetime | None = None
         self._broker_recorded: str | None = None
+        self.control = None  # ControlService (contrato v1.1), ligado em main.py
 
     # ------------------------------------------------------------------ estado
     async def restore(self) -> None:
@@ -139,6 +141,7 @@ class TelemetryService:
             "last_message_at": self.last_message_at,
             "stats": self.stats,
             "open_alerts": self.alerts.snapshot_open(),
+            "v1": self.control.snapshot() if self.control else None,
             "ws_clients": self.hub.client_count,
         }
 
@@ -172,7 +175,14 @@ class TelemetryService:
     async def handle(self, topic: str, payload: bytes, *, qos: int | None = None, retained: bool = False,
                      received_at: datetime | None = None) -> dict:
         async with self._lock:
-            return await self._handle(topic, payload, qos, retained, received_at or utcnow())
+            result = await self._handle(topic, payload, qos, retained, received_at or utcnow())
+        if self.control is not None and "v1" in result:
+            try:
+                await self.control.after(result)
+            except Exception:
+                log.exception("erro no controle v1 após %s", topic)
+            await self._push_state()
+        return result
 
     async def _ensure_device(self, c: asyncpg.Connection, role: str, key: str, at: datetime) -> int:
         cached = self._device_ids.get((role, key))
@@ -190,6 +200,10 @@ class TelemetryService:
         self.stats["recebidas"] += 1
         parsed = p.parse(topic, payload)
         origin = p.topic_origin(topic)
+        if isinstance(parsed, p.V1Msg) and isinstance(parsed.obj, v1.V1Echo):
+            # eco do que o próprio backend publicou (comando/config/status): já registrado ao publicar
+            self.stats["recebidas"] -= 1
+            return {"status": "eco", "topic": topic}
         text = payload.decode("utf-8", "replace") if self.store_raw else None
         if isinstance(parsed, p.ParseError):
             status = "invalido"
@@ -218,6 +232,8 @@ class TelemetryService:
                     result["presence"] = await self._store_presence(c, parsed, at, retained)
                 elif isinstance(parsed, p.ShadeMsg):
                     result["shade"] = await self._store_shade(c, parsed, msg_id, at, retained)
+                elif isinstance(parsed, p.V1Msg) and self.control is not None:
+                    result.update(await self.control.store(c, parsed.obj, msg_id, at, retained))
         except Exception as e:  # falha de banco ou bug: registra fora da transação abortada
             log.exception("erro ao processar mensagem de %s", topic)
             self.stats["erros"] += 1
